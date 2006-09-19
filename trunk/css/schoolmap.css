@@ -1,0 +1,11 @@
+.disabled {
+    color: black;
+    background-color: white;
+    border: 0;
+}
+body,td,p,input,textarea {
+    font-family: sans-serif;
+    font-size: 90%;
+}
+hr { border-top: gray solid 1px; border-bottom: 0px; width: 100% }
+img { border: 0px }
