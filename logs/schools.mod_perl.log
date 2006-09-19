@@ -1,0 +1,24 @@
+params: minX maxX minY maxY limit orderBy ofstedType
+maxX = 4.02099609375
+ofstedType = all
+minX = -7.009277343749999
+orderBy = average_secondary
+minY = 48.370847702383664
+limit = 20
+maxY = 56.413901376006756
+25678 at Tue Sep 19 12:17:02 2006
+SELECT count( * ) from dfes,ofsted WHERE 
+dfes.name = ofsted.name AND dfes.postcode = ofsted.postcode AND 
+dfes.lon > -7.009277343749999 AND 
+dfes.lon < 4.02099609375 AND 
+dfes.lat > 48.370847702383664 AND
+dfes.lat < 56.413901376006756 
+nschools: 16500
+SELECT dfes.*, ofsted.url AS ofsted_url, ofsted.type AS ofsted_type FROM dfes,ofsted WHERE
+dfes.name = ofsted.name AND dfes.postcode = ofsted.postcode AND 
+dfes.lon > -7.009277343749999 AND
+dfes.lon < 4.02099609375 AND
+dfes.lat > 48.370847702383664 AND
+dfes.lat < 56.413901376006756
+ORDER BY average_secondary DESC
+ LIMIT 20
