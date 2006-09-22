@@ -11,4 +11,4 @@ warn "$$ at ", scalar( localtime ), "\n";
 print "Content-Type: text/html\n\n";
 my $formdata = CGI::Lite->new->parse_form_data();
 my $tt = Template->new();
-$tt->process( "index.html", $formdata ) || die $tt->error();
+$tt->process( "ol.html", $formdata ) || die $tt->error();

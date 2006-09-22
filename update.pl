@@ -15,6 +15,7 @@ require DBI;
 use FindBin qw( $Bin );
 use lib "$Bin/lib";
 require HTML::TableContentParser;
+require HTML::TableParser;
 use Pod::Usage;
 use Getopt::Long;
 require Geo::Multimap;
@@ -22,9 +23,11 @@ use LWP::Simple;
 require HTML::TreeBuilder;
 require HTML::LinkExtractor;
 require Proc::Pidfile;
+use File::Temp qw/ tempfile /;
+use Data::Dumper;
 
 my %opts;
-my @opts = qw( silent pidfile ofsted dfes verbose all );
+my @opts = qw( silent pidfile! isi ofsted dfes verbose all );
 $opts{pidfile} = 1;
 GetOptions( \%opts, @opts ) or pod2usage( verbose => 0 );
 my $pp;
@@ -36,11 +39,11 @@ if ( $opts{pidfile} )
 open( STDERR, ">$Bin/logs/update.log" ) unless $opts{verbose};
 print STDERR "$0 ($$) at ", scalar( localtime ), "\n";
 my $geo = Geo::Multimap->new();
-my $p = HTML::TableContentParser->new();
 my $dbh = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
 
 update_dfes() if $opts{dfes} || $opts{all};
 update_ofsted() if $opts{ofsted} || $opts{all};
+update_isi() if $opts{isi} || $opts{all};
 
 warn "$0 ($$) finished\n";
 
@@ -198,6 +201,58 @@ SQL
     warn "update ofsted finished\n";
 }
 
+sub update_isi
+{
+    warn "update isi ...\n";
+    my $base = 'http://www.isinspect.org.uk/isindex/alpha.htm';
+    my $re = qr{http://www.isinspect.org.uk/report/\d+.htm};
+    for my $school_link ( get_links( $base, $re ) )
+    {
+        warn "GET $school_link\n";
+        my $html = get( $school_link );
+        $html =~ s/\s*<BR>\s*/\000/g;
+        my ( $name ) = $html =~ m{<big>(.*?)</big>};
+        $name =~ s/^\s*//;
+        $name =~ s/\s*$//;
+        my %school = ( name => $name );
+        warn "NAME: $name\n";
+        my ( @keys, @vals );
+        my $tp = HTML::TableParser->new(
+            [
+                {
+                    id => '1.1.2.1',
+                    hdr => sub { 
+                        @keys = map { s![\s/]+!_!g; $_ } map lc( $_ ), map { split( "\000", $_ ) } @{$_[2]};
+                    },
+                    row => sub { @school{@keys} = @vals = map { split( "\000", $_ ) } @{$_[2]} },
+                },
+            ],
+            {
+                Decode => 1,
+                DecodeNBSP => 1,
+                Chomp => 1,
+                Trim => 1,
+            }
+        );
+        $tp->parse( $html );
+        @keys = ( @keys, 'lon', 'lat', 'name' );
+        eval {
+            ( $school{lat}, $school{lon} ) = $geo->coords( $school{postcode} );
+            warn "lat, lon = $school{lat}, $school{lon}\n";
+            warn "keys: ", join( ",", @keys ), "\n";
+            warn "vals: @vals\n";
+            warn Dumper( \%school );
+            my $keys = join( ",", @keys );
+            my $placeholders = join( ",", map "?", @keys );
+            my $sql = " REPLACE INTO isi ( $keys ) VALUES ( $placeholders )";
+            warn $sql;
+            my $sth = $dbh->prepare( $sql );
+            $sth->execute( @school{@keys} );
+        };
+        warn "ERROR: $@\n" if $@;
+    }
+}
+
 sub update_dfes
 {
     warn "update dfes ...\n";
@@ -258,6 +313,7 @@ sub update_dfes
             " ON DUPLICATE KEY UPDATE " . join( ",", map "$_=?", @keys )
         ;
         my $sth = $dbh->prepare( $sql );
+        my $tcp = HTML::TableContentParser->new();
         for my $regions_link ( get_links( $type_link, $re{regions} ) )
         {
             warn "\t$regions_link\n";
@@ -272,7 +328,7 @@ sub update_dfes
                         warn "\t\t\tlea: $lea: $lea_link\n";
                         my $html = get( $lea_link );
                         die "get $lea_link failed" unless $html;
-                        my $tables = $p->parse($html);
+                        my $tables = $tcp->parse($html);
                         for my $t (@$tables) 
                         {
                             ROW: for my $r (@{$t->{rows}}) 
