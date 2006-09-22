@@ -147,6 +147,7 @@ var noRedraw = false;
 
 function getSchoolsCallback( response )
 {
+    markers.clearMarkers();
     removeChildren( listDiv );
     googleDiv.innerHTML = google_html;
     var xmlDoc = response.responseXML;
@@ -246,8 +247,6 @@ function getSchools()
         "&maxY=" + escape( bounds.top )
     }
     schools = new Array();
-    markers.clearMarkers();
-    removeChildren( listDiv );
     if ( transaction ) YAHOO.util.Connect.abort( transaction );
     transaction = YAHOO.util.Connect.asyncRequest( 'GET', url, { success:getSchoolsCallback } );
 }
@@ -287,7 +286,6 @@ function addPopup()
         this.school.address
     );
     map.addPopup( this.popup, true );
-
 }
 
 function createSchoolMarker( school, colour ) 
@@ -298,7 +296,7 @@ function createSchoolMarker( school, colour )
         var marker = createMarker( school.letter, colour, point );
         // marker.events.register( "mouseover", marker, mouseOver );
         // marker.events.register( "mouseout", marker, mouseOut );
-        // marker.events.register( "click", marker, addPopup );
+        marker.events.register( "click", marker, toggleMarker );
         marker.school = school;
         school.marker = marker;
     }
@@ -574,16 +572,31 @@ function mouseOver()
     activateMarker( this );
 }
 
+var active_marker;
+
+function toggleMarker()
+{
+    if ( this.active ) deActivateMarker( this );
+    else 
+    {
+        if ( active_marker ) deActivateMarker( active_marker );
+        activateMarker( this );
+        active_marker = this;
+    }
+}
+
 function deActivateMarker( marker )
 {
     changeLinksColour( marker.links, "blue" )
     changeMarkerColour( marker, "blue" )
+    marker.active = false;
 }
 
 function activateMarker( marker )
 {
     changeLinksColour( marker.links, "red" )
     changeMarkerColour( marker, "red" )
+    marker.active = true;
 }
 
 function addOpt( sel, str, val, isSel )
