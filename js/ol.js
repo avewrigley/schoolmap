@@ -8,7 +8,7 @@ var max_zoom = 15;
 var postcodePt;
 var cgi_url = "cgi/schools.cgi";
 var modperl_url = "schools";
-var schools_url = modperl_url;
+var schools_url = cgi_url;
 var nearby_url = "http://www.nearby.org.uk/";
 var icon_root_url = 'http://bluweb.com/us/chouser/gmapez/iconEZ2/';
 var schools;
@@ -159,7 +159,6 @@ function getSchoolsCallback( response )
     {
         createSchoolMarker( createSchool( schoolsXml[i] ), "blue" );
     }
-    if ( postcodePt ) createMarker( "X", "red", postcodePt );
     if ( nschools && schoolsXml.length )
     {
         listDiv.appendChild( createListTable() );
@@ -171,25 +170,30 @@ function getSchoolsCallback( response )
     {
         setStatus( "there are no schools in on this map" ); 
     }
-    var zl = max_zoom;
-    noRedraw = true;
-    var markersOffScreen = 1;
-    while ( markersOffScreen )
+    if ( postcodePt )
     {
-        markersOffScreen = 0;
-        map.zoomTo( zl-- );
-        markersOffScreen = 0;
-        for ( var i = 0; i < markers.markers.length; i++ )
+        createMarker( "X", "red", postcodePt );
+        var zl = max_zoom;
+        noRedraw = true;
+        var markersOffScreen = 1;
+        while ( markersOffScreen )
         {
-            var marker = markers.markers[i];
-            if ( ! marker.onScreen() )
+            markersOffScreen = 0;
+            map.zoomTo( zl-- );
+            map.setCenter( postcodePt );
+            markersOffScreen = 0;
+            for ( var i = 0; i < markers.markers.length; i++ )
             {
-                markersOffScreen++;
+                var marker = markers.markers[i];
+                if ( ! marker.onScreen() )
+                {
+                    markersOffScreen++;
+                }
             }
         }
+        noRedraw = false;
     }
-    noRedraw = false;
-    transation = false;
+    transaction = false;
 }
 
 function getSchools()
@@ -222,13 +226,9 @@ function getSchools()
     ); 
     var bounds = map.getExtent();
     url = schools_url + "?" +
-        "minX=" + escape( bounds.left ) + 
-        "&maxX=" + escape( bounds.right ) + 
-        "&minY=" + escape( bounds.bottom ) + 
-        "&maxY=" + escape( bounds.top ) +
-        "&limit=" + escape( document.forms[0].limit.value ) +
+        "ofstedType=" + escape( ofsted_type ) +
         "&orderBy=" + escape( order_by ) +
-        "&ofstedType=" + escape( ofsted_type )
+        "&limit=" + escape( document.forms[0].limit.value )
     ;
     if ( postcodePt )
     {
@@ -236,6 +236,14 @@ function getSchools()
             "&centreX=" + escape( postcodePt.lon ) +
             "&centreY=" + escape( postcodePt.lat )
         ;
+    }
+    else
+    {
+        url +=
+        "&minX=" + escape( bounds.left ) + 
+        "&maxX=" + escape( bounds.right ) + 
+        "&minY=" + escape( bounds.bottom ) + 
+        "&maxY=" + escape( bounds.top )
     }
     schools = new Array();
     markers.clearMarkers();
@@ -259,7 +267,11 @@ function createSchool( schoolXML )
 function createMarker( letter, colour, point )
 {
     var image = getIconUrl( letter, colour );
-    var icon = new OpenLayers.Icon( image, new OpenLayers.Size( 20, 34 ) );
+    var icon = new OpenLayers.Icon(
+        image, 
+        new OpenLayers.Size( 20, 34 ),
+        new OpenLayers.Pixel( -9, -27 )
+    );
     var marker = new OpenLayers.Marker( point, icon );
     markers.addMarker( marker );
     return marker;
