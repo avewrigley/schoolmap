@@ -17,7 +17,7 @@ require CGI::Lite;
 open( STDERR, ">>../logs/schools.log" );
 warn "$$ at ", scalar( localtime ), "\n";
 my %formdata = CGI::Lite->new->parse_form_data();
-warn map "$_ = $formdata{$_}\n", keys %formdata;
+warn map "$_ = $formdata{$_}\n", keys %formdata if %formdata;
 my $ofsted = Schools->new( %formdata );
 my $xml;
 if ( $formdata{types} )
@@ -35,7 +35,7 @@ else
     print "Content-Type: text/xml\n\n";
     $xml = $ofsted->schools_xml();
 }
-warn $xml;
+# warn $xml;
 print $xml;
 
 #------------------------------------------------------------------------------

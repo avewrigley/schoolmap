@@ -1,17 +1,28 @@
 var googleDiv;
 var google_html;
+var baseIcon = new GIcon();
+baseIcon.shadow = "http://www.google.com/mapfiles/shadow50.png";
+baseIcon.iconSize = new GSize(20, 34);
+baseIcon.shadowSize = new GSize(37, 34);
+baseIcon.iconAnchor = new GPoint(9, 34);
+baseIcon.infoWindowAnchor = new GPoint(9, 2);
+baseIcon.infoShadowAnchor = new GPoint(18, 25);
 var map;
-var markers;
-var default_centre;
-var default_zoom = 6;
-var max_zoom = 15;
+var default_centre = new GPoint( -1.4881, 52.5713 );
+var current_centre = default_centre;
+var closeup_zoom = 5;
+var default_zoom = 11;
+var max_zoom = 7;
+var current_zoom = default_zoom;
+var postcodeMarker;
+var centreIcon = new GIcon( baseIcon );
 var postcodePt;
 var cgi_url = "cgi/schools.cgi";
 var modperl_url = "schools";
-var schools_url = cgi_url;
+var schools_url = modperl_url;
 var nearby_url = "http://www.nearby.org.uk/";
-var icon_root_url = 'http://bluweb.com/us/chouser/gmapez/iconEZ2/';
-var schools;
+icon_root_url = 'http://bluweb.com/us/chouser/gmapez/iconEZ2/';
+centreIcon.image = icon_root_url + 'marker-RED-DOT.png';
 
 var types = new Array();
 
@@ -54,10 +65,40 @@ var listDiv;
 var letters = new Object();
 letters["post16"] = "O";
 
+var schools_request;
+
+function onMove()
+{
+    try {
+        var centre = map.getCenterLatLng();
+        if ( centre.x == current_centre.x && centre.y == current_centre.y ) 
+            return
+        ;
+        current_centre = centre;
+        var x = centre.x;
+        if ( x.toFixed ) x = x.toFixed( 4 );
+        var y = centre.y;
+        if ( y.toFixed ) y = y.toFixed( 4 );
+        getSchools();
+    }
+    catch( e ) {
+        alert( "error in onMove: " + e.message );
+    }
+}
+
+function onZoom()
+{
+    var zoom = map.getZoomLevel();
+    if ( zoom == current_zoom ) return;
+    current_zoom = map.getZoomLevel();
+    getSchools();
+}
+
 function clearPostcode()
 {
     document.forms[0].postcode.value = "";
-    postcodePt = false;
+    if ( postcodeMarker ) map.removeOverlay( postcodeMarker );
+    postcodeMarker = postcodePt = false;
     childReplace( nearbyDiv, document.createTextNode( '' ) );
     setDefaultOrder();
     getSchools();
@@ -66,10 +107,11 @@ function clearPostcode()
 function getPostcode()
 {
     var postcode = document.forms[0].postcode.value;
+    if ( postcodeMarker ) map.removeOverlay( postcodeMarker );
     nearbyDiv = document.getElementById( "nearby" );
     if ( ! postcode.length )
     {
-        postcodePt = false;
+        postcodeMarker = postcodePt = false;
         childReplace( nearbyDiv, document.createTextNode( '' ) );
         return;
     }
@@ -81,19 +123,27 @@ function getPostcode()
     document.forms[0].gotobutton.disabled = true;
     setStatus( "finding " + postcode ); 
     var url = "cgi/postcode.cgi?postcode=" + escape( postcode );
-    var transaction = YAHOO.util.Connect.asyncRequest( 'GET', url, { success:getPostcodeCallback } );
-}
-
-function getPostcodeCallback( response )
-{
-    var xmlDoc = response.responseXML;
-    var coords = xmlDoc.documentElement.getElementsByTagName( "coords" );
-    var x = coords[0].getAttribute( "lon" );
-    var y = coords[0].getAttribute( "lat" );
-    var code = coords[0].getAttribute( "code" );
-    document.forms[0].postcode.value = code;
-    postcodePt = new OpenLayers.LonLat( x, y );
-    map.setCenter( postcodePt );
+    var request = GXmlHttp.create();
+    request.open( "GET", url, false );
+    request.send( null );
+    var xmlDoc = request.responseXML;
+    try {
+        var coords = xmlDoc.documentElement.getElementsByTagName( "coords" );
+        var x = coords[0].getAttribute( "lon" );
+        var y = coords[0].getAttribute( "lat" );
+        var code = coords[0].getAttribute( "code" );
+        document.forms[0].postcode.value = code;
+        postcodePt = new GPoint( x, y );
+        postcodeMarker = new GMarker( postcodePt, centreIcon );
+        map.addOverlay( postcodeMarker );
+        map.zoomTo( closeup_zoom );
+        map.recenterOrPanToLatLng( postcodePt );
+    }
+    catch( e )
+    {
+        alert( "error in getPostcode: " + e.message );
+        return;
+    }
     initTypes();
     setDefaultOrder();
     document.forms[0].gotobutton.disabled = false;
@@ -102,19 +152,44 @@ function getPostcodeCallback( response )
 
 function removeChildren( parent )
 {
-    while ( parent.childNodes.length ) parent.removeChild( parent.childNodes[0] );
+    while ( parent.childNodes.length )
+    {
+        parent.removeChild( parent.childNodes[0] );
+    }
 }
 
 function childReplace( parent, node )
 {
     var firstBorn = parent.childNodes[0];
-    if ( firstBorn ) parent.replaceChild( node, firstBorn );
-    else parent.appendChild( node );
+    if ( firstBorn )
+    {
+        parent.replaceChild( node, firstBorn );
+    }
+    else
+    {
+        parent.appendChild( node );
+    }
 }
 
 function setStatus( text )
 {
     window.status = text;
+}
+
+function makeVisible( pt )
+{
+    var bounds = map.getBoundsLatLng();
+    while ( 
+        pt.x < bounds.minX ||
+        pt.x > bounds.maxX ||
+        pt.y < bounds.minY ||
+        pt.y > bounds.maxY
+    )
+    {
+        map.zoomTo( map.getZoomLevel() + 1 );
+        bounds = map.getBoundsLatLng();
+        if ( map.getZoomLevel() == 12 ) return;
+    }
 }
 
 function getOptions( sel )
@@ -142,64 +217,8 @@ function setDefaultOrder()
     }
 }
 
-var transaction;
-var noRedraw = false;
-
-function getSchoolsCallback( response )
-{
-    markers.clearMarkers();
-    removeChildren( listDiv );
-    googleDiv.innerHTML = google_html;
-    var xmlDoc = response.responseXML;
-    var meta = xmlDoc.documentElement.getElementsByTagName( "schools" );
-    var schoolsXml = xmlDoc.documentElement.getElementsByTagName( "school" );
-    var nschools;
-    if ( meta ) nschools = meta[0].getAttribute( 'nschools' );
-    var nSchools = schoolsXml.length;
-    for ( var i = 0; i < schoolsXml.length; i++ )
-    {
-        createSchoolMarker( createSchool( schoolsXml[i] ), "blue" );
-    }
-    if ( nschools && schoolsXml.length )
-    {
-        listDiv.appendChild( createListTable() );
-        var b = document.createElement( "B" );
-        b.appendChild( document.createTextNode( schoolsXml.length + " / " + nschools + " schools" ) );
-        listDiv.appendChild( b );
-    }
-    else
-    {
-        setStatus( "there are no schools in on this map" ); 
-    }
-    if ( postcodePt )
-    {
-        createMarker( "X", "red", postcodePt );
-        var zl = max_zoom;
-        noRedraw = true;
-        var markersOffScreen = 1;
-        while ( markersOffScreen )
-        {
-            markersOffScreen = 0;
-            map.zoomTo( zl-- );
-            map.setCenter( postcodePt );
-            markersOffScreen = 0;
-            for ( var i = 0; i < markers.markers.length; i++ )
-            {
-                var marker = markers.markers[i];
-                if ( ! marker.onScreen() )
-                {
-                    markersOffScreen++;
-                }
-            }
-        }
-        noRedraw = false;
-    }
-    transaction = false;
-}
-
 function getSchools()
 {
-    if ( noRedraw ) return;
     var ofsted_type = document.forms[0].ofsted_type.value;
     var order_by = document.forms[0].order_by.value;
     var url;
@@ -225,84 +244,67 @@ function getSchools()
         order_by + 
         ")", 4
     ); 
-    var bounds = map.getExtent();
+    var bounds = map.getBoundsLatLng();
     url = schools_url + "?" +
-        "ofstedType=" + escape( ofsted_type ) +
+        "minX=" + escape( bounds.minX ) + 
+        "&maxX=" + escape( bounds.maxX ) + 
+        "&minY=" + escape( bounds.minY ) + 
+        "&maxY=" + escape( bounds.maxY ) +
+        "&limit=" + escape( document.forms[0].limit.value ) +
         "&orderBy=" + escape( order_by ) +
-        "&limit=" + escape( document.forms[0].limit.value )
+        "&ofstedType=" + escape( ofsted_type )
     ;
     if ( postcodePt )
     {
         url +=
-            "&centreX=" + escape( postcodePt.lon ) +
-            "&centreY=" + escape( postcodePt.lat )
+            "&centreX=" + escape( postcodePt.x ) +
+            "&centreY=" + escape( postcodePt.y )
         ;
     }
-    else
+    if ( schools_request && schools_request.readyState > 4 ) schools_request.abort();
+    schools_request = GXmlHttp.create();
+    removeMarkers();
+    removeChildren( listDiv );
+    schools_request.open( "GET", url, true );
+    schools_request.onreadystatechange = function() 
     {
-        url +=
-        "&minX=" + escape( bounds.left ) + 
-        "&maxX=" + escape( bounds.right ) + 
-        "&minY=" + escape( bounds.bottom ) + 
-        "&maxY=" + escape( bounds.top )
+        if ( schools_request.readyState == 4 )
+        {
+            removeMarkers();
+            removeChildren( listDiv );
+            googleDiv.innerHTML = google_html;
+            var xmlDoc = schools_request.responseXML;
+            var meta = xmlDoc.documentElement.getElementsByTagName( "schools" );
+            var schools = xmlDoc.documentElement.getElementsByTagName( "school" );
+            var nschools;
+            if ( meta ) nschools = meta[0].getAttribute( 'nschools' );
+            var nSchools = schools.length;
+            for ( var i = 0; i < schools.length; i++ )
+            {
+                createMarker( schools[i] );
+            }
+            if ( nschools && schools.length )
+            {
+                listDiv.appendChild( createListTable() );
+                var b = document.createElement( "B" );
+                b.appendChild( document.createTextNode( schools.length + " / " + nschools + " schools" ) );
+                listDiv.appendChild( b );
+            }
+            else
+            {
+                setStatus( "there are no schools in on this map" ); 
+            }
+            if ( name )
+            {
+                for ( marker = getFirstMarker(); marker; marker = getNextMarker() )
+                {
+                    makeVisible( marker.point );
+                }
+            }
+        }
     }
-    schools = new Array();
-    if ( transaction ) YAHOO.util.Connect.abort( transaction );
-    transaction = YAHOO.util.Connect.asyncRequest( 'GET', url, { success:getSchoolsCallback } );
+    schools_request.send( null );
 }
-
-function createSchool( schoolXML )
-{
-    var school = new Object();
-    for ( var j = 0; j < schoolXML.attributes.length; j++ )
-    {
-        var attr = schoolXML.attributes.item( j );
-        if ( attr.value ) school[attr.name] = attr.value;
-    }
-    schools.push( school );
-    return school;
-}
-
-function createMarker( letter, colour, point )
-{
-    var image = getIconUrl( letter, colour );
-    var icon = new OpenLayers.Icon(
-        image, 
-        new OpenLayers.Size( 20, 34 ),
-        new OpenLayers.Pixel( -9, -27 )
-    );
-    var marker = new OpenLayers.Marker( point, icon );
-    markers.addMarker( marker );
-    return marker;
-}
-
-function addPopup()
-{
-    if ( this.popup ) this.removePopup( this.popup );
-    this.popup = new OpenLayers.Popup( 
-        this.school.name,
-        this.lonlat,
-        new OpenLayers.Size( 200, 50 ),
-        this.school.address
-    );
-    map.addPopup( this.popup, true );
-}
-
-function createSchoolMarker( school, colour ) 
-{
-    try {
-        school.letter = getLetter( school.ofsted_type );
-        var point = new OpenLayers.LonLat( school.lon, school.lat );
-        var marker = createMarker( school.letter, colour, point );
-        // marker.events.register( "mouseover", marker, mouseOver );
-        // marker.events.register( "mouseout", marker, mouseOut );
-        marker.events.register( "click", marker, toggleMarker );
-        marker.school = school;
-        school.marker = marker;
-    }
-    catch(e) { alert( e ) }
-}
-
 
 function initTypes()
 {
@@ -368,32 +370,29 @@ function initMap()
     googleDiv = document.getElementById( "google" );
     listDiv = document.getElementById( "list" );
     google_html = googleDiv.innerHTML;
-    default_centre = new OpenLayers.LonLat( -1.4881, 52.5713 );
-    map = new OpenLayers.Map( 'map' );
-    var gmapLayer = new OpenLayers.Layer.Google( "GMaps" );
-    map.addLayer( gmapLayer );
-    map.setCenter( default_centre );
-    map.events.register( "zoomend", map, getSchools );
-    map.events.register( "moveend", map, getSchools );
-    markers = new OpenLayers.Layer.Markers( "Markers" );
-    map.addLayer( markers );
+    var mapDiv = document.getElementById( "map" );
+    map = new GMap( mapDiv );
+    map.addControl(new GMapTypeControl());
+    map.addControl(new GLargeMapControl());
+    GEvent.addListener( map, "zoom", onZoom );
+    GEvent.addListener( map, "moveend", onMove );
+    map.centerAndZoom( default_centre, default_zoom );
     initTypes();
     if ( document.forms[0].postcode.value ) getPostcode();
     setDefaultOrder();
-    map.zoomTo( default_zoom );
     getSchools();
 }
 
-function createListTd( text, url, school, onclick, wrap )
+
+function createListTd( text, url, marker, onclick, wrap )
 {
     var td = document.createElement( "TD" );
     if ( url )
     {
         var a = document.createElement( "A" );
-        a.target = school.school_id;
+        a.target = marker.school_id;
         if ( onclick ) a.onclick = onclick;
         a.href = url;
-        var marker = school.marker;
         a.marker = marker;
         if ( ! marker.links ) marker.links = new Array();
         marker.links.push( a );
@@ -415,37 +414,38 @@ function createListTd( text, url, school, onclick, wrap )
     return td;
 }
 
-function addCell( tr, type, keyname, school )
+
+function addCell( tr, type, keyname, marker )
 {
     var val = "-";
     var key = keyname + "_" + type;
-    if ( school[key] != 0 ) val = school[key];
-    var url = school["url_" + type];
+    if ( marker[key] != 0 ) val = marker[key];
+    var url = marker["url_" + type];
     var onclick = function() { window.open( url, "_new", "status,scrollbars" ); return false; };
-    tr.appendChild( createListTd( val, url, school, onclick ) );
+    tr.appendChild( createListTd( val, url, marker, onclick ) );
 }
 
-function createListRow( school )
+function createListRow( marker )
 {
     var onclick = function() { return false };
     var tr = document.createElement("TR");
-    tr.appendChild( createListTd( school.name, "about:blank", school, onclick, true ) );
+    tr.appendChild( createListTd( marker.name, "about:blank", marker, onclick, true ) );
     var ofsted = "no";
-    if ( school.ofsted_url ) ofsted = "yes";
-    var onclick = function() { window.open( school.ofsted_url, "_new", "status,scrollbars" ); return false; };
-    tr.appendChild( createListTd( ofsted, school.ofsted_url, school, onclick ) );
+    if ( marker.ofsted_url ) ofsted = "yes";
+    var onclick = function() { window.open( marker.ofsted_url, "_new", "status,scrollbars" ); return false; };
+    tr.appendChild( createListTd( ofsted, marker.ofsted_url, marker, onclick ) );
     for ( var i = 0; i < types.length; i++ )
     {
         var type = types[i];
-        addCell( tr, type, "average", school );
-        addCell( tr, type, "pupils", school );
+        addCell( tr, type, "average", marker );
+        addCell( tr, type, "pupils", marker );
     }
     var ofsted_type = "-";
-    if ( school.ofsted_type ) ofsted_type = school.ofsted_type;
+    if ( marker.ofsted_type ) ofsted_type = marker.ofsted_type;
     tr.appendChild( createListTd( ofsted_type ) );
     if ( postcodePt )
     {
-        var dist = school.distance;
+        var dist = marker.distance;
         tr.appendChild( createListTd( dist + " miles" ) );
     }
     return tr;
@@ -530,26 +530,24 @@ function createListTable()
             createHeadCell( tr, ths[i].name, ths[i].orderable );
         }
     }
-    for ( var i = 0; i < schools.length; i++ )
+    var marker = getFirstMarker();
+    while ( marker )
     {
-        var tr = createListRow( schools[i] );
+        var tr = createListRow( marker );
         tbody.appendChild( tr );
+        marker = getNextMarker();
     }
     return table;
 }
 
-function getIconUrl( letter, colour )
+function changeMarkerColour( marker, color )
 {
-    return icon_root_url + 'marker-' + colour.toUpperCase() + "-" + letter + '.png';
-}
 
-function changeMarkerColour( marker, colour )
-{
-    // var url = getIconUrl( marker.school.letter, colour );
-    // marker.icon.src = url;
-    // markers.redraw();
-    createSchoolMarker( marker.school, colour );
-    markers.removeMarker( marker );
+    var icon = marker.getIcon();
+    icon.image = src;
+    marker.hide();
+    marker.show();
+    alert( icon.image );
 }
 
 function changeLinksColour( links, color )
@@ -572,31 +570,18 @@ function mouseOver()
     activateMarker( this );
 }
 
-var active_marker;
-
-function toggleMarker()
-{
-    if ( this.active ) deActivateMarker( this );
-    else 
-    {
-        if ( active_marker ) deActivateMarker( active_marker );
-        activateMarker( this );
-        active_marker = this;
-    }
-}
-
 function deActivateMarker( marker )
 {
     changeLinksColour( marker.links, "blue" )
-    changeMarkerColour( marker, "blue" )
-    marker.active = false;
+    marker.amarker.hide();
+    marker.show();
 }
 
 function activateMarker( marker )
 {
     changeLinksColour( marker.links, "red" )
-    changeMarkerColour( marker, "red" )
-    marker.active = true;
+    marker.hide();
+    marker.amarker.show();
 }
 
 function addOpt( sel, str, val, isSel )
@@ -621,7 +606,71 @@ function showInfo()
 { 
     var x = this.lon;
     var y = this.lat;
-    var pt = new OpenLayers.LonLat( x, y );
+    var pt = new GPoint( x, y );
+    // map.recenterOrPanToLatLng( pt );
     var address = this.address.split( "," ).join( ",<br/>" );
     map.openInfoWindowHtml( pt, "<b>" + this.name + "</b>" + "<br/>" + address );
+}
+
+var markers = new Array();
+var curr_marker = 0;
+
+function getFirstMarker()
+{
+    curr_marker = 0;
+    return markers[0];
+}
+
+function getNextMarker()
+{
+    if ( ++curr_marker == markers.length )
+    {
+        curr_marker = 0;
+        return false;
+    }
+    return markers[curr_marker];
+}
+
+function removeMarkers()
+{
+    var marker = getFirstMarker();
+    while ( marker )
+    {
+        map.removeOverlay( marker );
+        map.removeOverlay( marker.amarker );
+        marker = getNextMarker();
+    }
+    markers = new Array();
+}
+
+function createMarker( school ) 
+{
+    point = new GPoint( 
+        school.getAttribute( 'lon' ), 
+        school.getAttribute( 'lat' ) 
+    );
+    var icon = new GIcon( baseIcon );
+    var marker = new GMarker( point, icon );
+    var aicon = new GIcon( baseIcon );
+    var amarker = new GMarker( point, aicon );
+    // Setup the mouse over/out events
+    GEvent.addListener( marker, "mouseover", mouseOver );
+    GEvent.addListener( marker, "mouseout", mouseOut );
+    GEvent.addListener( marker, "click", showInfo );
+    GEvent.addListener( amarker, "click", showInfo );
+    markers.push( marker );
+    for ( var j = 0; j < school.attributes.length; j++ )
+    {
+        var attr = school.attributes.item( j );
+        if ( attr.value ) marker[attr.name] = attr.value;
+        if ( attr.value ) amarker[attr.name] = attr.value;
+    }
+    var letter = getLetter( marker.ofsted_type );
+    icon.image = icon_root_url + 'marker-BLUE-' + letter + '.png';
+    aicon.image = icon_root_url + 'marker-RED-' + letter + '.png';
+    map.addOverlay( marker );
+    map.addOverlay( amarker );
+    amarker.hide();
+    marker.amarker = amarker;
+    return marker;
 }

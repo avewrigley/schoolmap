@@ -11,10 +11,22 @@ sub new
     my $self = bless { @_ }, $class;
     require DBI;
     $self->{dbh} = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
-    my @where = (
-        'dfes.name = ofsted.name',
-        'dfes.postcode = ofsted.postcode'
+    my @what = ( 
+        "dfes.*",
+        "ofsted.*",
+        "ofsted.url AS ofsted_url",
+        "ofsted.type AS ofsted_type"
     );
+    if ( $self->{orderBy} eq 'distance' )
+    {
+        push( 
+            @what, 
+            "acos( ( sin( ? ) * sin( ofsted.lat ) ) + ( cos( ? ) * cos( ofsted.lat ) * cos( ofsted.lon - ? ) ) ) AS cos_dist"
+        );
+    }
+    $self->{what} = join( ",", @what );
+    $self->{from} = "FROM ofsted LEFT JOIN dfes ON dfes.name = ofsted.name AND dfes.postcode = ofsted.postcode";
+    my @where = ();
     if ( $self->{type} )
     {
         my @types = ref( $self->{type} ) eq 'ARRAY' ? @{$self->{type}} : ( $self->{type} );
@@ -37,14 +49,14 @@ sub new
         push( 
             @where,
             (
-                "dfes.lon > $self->{minX}",
-                "dfes.lon < $self->{maxX}",
-                "dfes.lat > $self->{minY}",
-                "dfes.lat < $self->{maxY}",
+                "ofsted.lon > $self->{minX}",
+                "ofsted.lon < $self->{maxX}",
+                "ofsted.lat > $self->{minY}",
+                "ofsted.lat < $self->{maxY}",
             )
         );
     }
-    $self->{where} = join( " AND ", @where );
+    $self->{where} = @where ? "WHERE " . join( " AND ", @where ) : '';
     require Geo::Distance;
     $self->{geo} = Geo::Distance->new;
     $self->{geo}->formula( "cos" );
@@ -55,8 +67,7 @@ sub schools_count
 {
     my $self = shift;
     my $sql = <<EOF;
-SELECT count( * ) from dfes,ofsted WHERE 
-$self->{where}
+SELECT count( * ) $self->{from} $self->{where}
 EOF
     warn $sql;
     my $sth = $self->{dbh}->prepare( $sql );
@@ -82,26 +93,6 @@ EOF
     return join( ",", @types );
 }
 
-sub school_name_xml
-{
-    my $self = shift;
-    my $what = $self->what();
-    my $sql = " SELECT $what FROM dfes WHERE name LIKE ?";
-    $sql .= "  LIMIT $self->{limit}" if $self->{limit};
-    warn $sql;
-    my $sth = $self->{dbh}->prepare( $sql );
-    my $nschools = $sth->execute( "%" . $self->{schoolname} . "%" );
-    my $xml = "<data><schools nschools=\"$nschools\">";
-    while ( my $school = $sth->fetchrow_hashref )
-    {
-        $self->add_distance( $school );
-        $xml .= $self->school_xml( $school );
-    }
-    $xml .= "</schools></data>";
-    warn $xml;
-    return $xml;
-}
-
 sub add_distance
 {
     my $self = shift;
@@ -113,32 +104,17 @@ sub add_distance
     ) );
 }
 
-sub what
-{
-    my $self = shift;
-    return 'dfes.*, ofsted.url AS ofsted_url, ofsted.type AS ofsted_type';
-}
-
 sub schools_xml
 {
     my $self = shift;
     my $sth;
-    if ( $self->{schoolname} )
-    {
-        return $self->school_name_xml;
-    }
     my $nschools = $self->schools_count();
     warn "nschools: $nschools\n";
     my $xml = "<data><schools nschools=\"$nschools\">";
-    my $what = $self->what();
     if ( $self->{orderBy} eq 'distance' )
     {
         my $sql = <<EOF;
-SELECT 
-    $what,
-    acos( ( sin( ? ) * sin( dfes.lat ) ) + ( cos( ? ) * cos( dfes.lat ) * cos( dfes.lon - ? ) ) ) AS cos_dist
-FROM dfes,ofsted WHERE
-$self->{where}
+SELECT $self->{what} $self->{from} $self->{where}
 ORDER BY cos_dist
 EOF
         $sql .= " LIMIT $self->{limit}" if $self->{limit};
@@ -154,8 +130,7 @@ EOF
     else
     {
         my $sql = <<EOF;
-SELECT $what FROM dfes,ofsted WHERE
-$self->{where}
+SELECT $self->{what} $self->{from} $self->{where}
 ORDER BY $self->{orderBy} DESC
 EOF
         $sql .= " LIMIT $self->{limit}" if $self->{limit};
@@ -169,6 +144,7 @@ EOF
         $xml .= $self->school_xml( $school ) . "\n";
     }
     $xml .= "</schools></data>";
+    warn $xml;
     return $xml;
 }
 
@@ -179,11 +155,11 @@ sub school_xml
     return
         "<school" . join( "",
         map( 
-            " $_=" .
+            "\n\t$_=" .
             '"' .
             encode_entities( $school->{$_}, '<>&"' ) .
             '"', 
-            keys %$school 
+            grep { length $school->{$_} } keys %$school 
         ) ) .
         "/>"
     ;
