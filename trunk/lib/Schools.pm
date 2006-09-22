@@ -11,21 +11,40 @@ sub new
     my $self = bless { @_ }, $class;
     require DBI;
     $self->{dbh} = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
-    $self->{where} = 'dfes.name = ofsted.name AND dfes.postcode = ofsted.postcode AND ';
+    my @where = (
+        'dfes.name = ofsted.name',
+        'dfes.postcode = ofsted.postcode'
+    );
     if ( $self->{type} )
     {
         my @types = ref( $self->{type} ) eq 'ARRAY' ? @{$self->{type}} : ( $self->{type} );
         if ( @types )
         {
-            $self->{where} = "(" . join( " OR ", map( "pupils_$_ <> 0", @types ) ) . ") AND ";
+            push( 
+                @where, 
+                "(" . join( " OR ", map( "pupils_$_ <> 0", @types ) ) . ")" 
+            );
         }
     }
     my $ofstedType = $self->{ofstedType};
     if ( $ofstedType && $ofstedType ne 'all' )
     {
         warn "ofstedType: $ofstedType\n";
-        $self->{where} .= "ofsted.type = '$ofstedType' AND ";
+        push( @where, "ofsted.type = '$ofstedType'" );
     }
+    if ( $self->{minX} )
+    {
+        push( 
+            @where,
+            (
+                "dfes.lon > $self->{minX}",
+                "dfes.lon < $self->{maxX}",
+                "dfes.lat > $self->{minY}",
+                "dfes.lat < $self->{maxY}",
+            )
+        );
+    }
+    $self->{where} = join( " AND ", @where );
     require Geo::Distance;
     $self->{geo} = Geo::Distance->new;
     $self->{geo}->formula( "cos" );
@@ -38,10 +57,6 @@ sub schools_count
     my $sql = <<EOF;
 SELECT count( * ) from dfes,ofsted WHERE 
 $self->{where}
-dfes.lon > $self->{minX} AND 
-dfes.lon < $self->{maxX} AND 
-dfes.lat > $self->{minY} AND
-dfes.lat < $self->{maxY} 
 EOF
     warn $sql;
     my $sth = $self->{dbh}->prepare( $sql );
@@ -124,10 +139,6 @@ SELECT
     acos( ( sin( ? ) * sin( dfes.lat ) ) + ( cos( ? ) * cos( dfes.lat ) * cos( dfes.lon - ? ) ) ) AS cos_dist
 FROM dfes,ofsted WHERE
 $self->{where}
-dfes.lon > $self->{minX} AND 
-dfes.lon < $self->{maxX} AND 
-dfes.lat > $self->{minY} AND
-dfes.lat < $self->{maxY}
 ORDER BY cos_dist
 EOF
         $sql .= " LIMIT $self->{limit}" if $self->{limit};
@@ -145,10 +156,6 @@ EOF
         my $sql = <<EOF;
 SELECT $what FROM dfes,ofsted WHERE
 $self->{where}
-dfes.lon > $self->{minX} AND
-dfes.lon < $self->{maxX} AND
-dfes.lat > $self->{minY} AND
-dfes.lat < $self->{maxY}
 ORDER BY $self->{orderBy} DESC
 EOF
         $sql .= " LIMIT $self->{limit}" if $self->{limit};
@@ -159,7 +166,7 @@ EOF
     while ( my $school = $sth->fetchrow_hashref )
     {
         $self->add_distance( $school );
-        $xml .= $self->school_xml( $school );
+        $xml .= $self->school_xml( $school ) . "\n";
     }
     $xml .= "</schools></data>";
     return $xml;

@@ -35,7 +35,7 @@ else
     print "Content-Type: text/xml\n\n";
     $xml = $ofsted->schools_xml();
 }
-# warn $xml;
+warn $xml;
 print $xml;
 
 #------------------------------------------------------------------------------
