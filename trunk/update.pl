@@ -41,9 +41,9 @@ print STDERR "$0 ($$) at ", scalar( localtime ), "\n";
 my $geo = Geo::Multimap->new();
 my $dbh = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
 
+update_isi() if $opts{isi} || $opts{all};
 update_dfes() if $opts{dfes} || $opts{all};
 update_ofsted() if $opts{ofsted} || $opts{all};
-update_isi() if $opts{isi} || $opts{all};
 
 warn "$0 ($$) finished\n";
 
@@ -99,6 +99,7 @@ sub get_links
 sub update_ofsted
 {
     warn "update ofsted ...\n";
+    my %result;
     my $base = 'http://www.ofsted.gov.uk/reports/';
     my @fields = qw( 
         school_id 
@@ -130,15 +131,12 @@ SQL
     for my $region ( get_links( $base, $re{region} ) )
     {
         my ( $region_id ) = $region =~ $re{region};
-        warn "$region ($region_id)\n";
         for my $lea ( get_links( $region, $re{lea} ) )
         {
             my ( $lea_id ) = $lea =~ $re{lea};
-            warn "\t$lea ($lea_id)\n";
             for my $type ( get_links( $lea, $re{type} ) )
             {
                 my ( $type_id ) = $type =~ $re{type};
-                warn "\t\t$type ($type_id)\n";
                 my $page_no = 1;
                 while ( defined $page_no )
                 {
@@ -146,7 +144,6 @@ SQL
                     {
                         my $row;
                         my ( $school_id ) = $school =~ $re{school};
-                        warn "\t\t\t$school ($school_id)\n";
                         my %row;
                         $row{school_id} = $school_id;
                         $row{school} = $school;
@@ -169,18 +166,19 @@ SQL
                             }
                             for ( qw( lat lon name address postcode ) )
                             {
-                                die "no $_\n" unless $row{$_};
+                                die "no $_" unless $row{$_};
                             }
                         };
                         if ( $@ )
                         {
-                            warn "$school failed: $@\n";
+                            warn "FAILED: $row{url} failed: $@\n";
                         }
                         else
                         {
-                            warn "replace: $row{name} ($row{school_id})\n";
+                            warn "SUCCESS: $row{name} ($row{school_id})\n";
                             $sth->execute( @row{@fields} );
                         }
+                        $result{$row{url}} = $@;
                     }
                     my @pages = get_links( $type, $re{page} );
                     my $next;
@@ -198,6 +196,8 @@ SQL
             }
         }
     }
+    warn "SUCCESSFUL: ", scalar( grep { ! defined $result{$_} } keys %result ), "\n";
+    warn "FAILED: ", scalar( grep { defined $result{$_} } keys %result ), "\n";
     warn "update ofsted finished\n";
 }
 
@@ -206,56 +206,64 @@ sub update_isi
     warn "update isi ...\n";
     my $base = 'http://www.isinspect.org.uk/isindex/alpha.htm';
     my $re = qr{http://www.isinspect.org.uk/report/\d+.htm};
+    my %result;
     for my $school_link ( get_links( $base, $re ) )
     {
-        warn "GET $school_link\n";
-        my $html = get( $school_link );
-        $html =~ s/\s*<BR>\s*/\000/g;
-        my ( $name ) = $html =~ m{<big>(.*?)</big>};
-        $name =~ s/^\s*//;
-        $name =~ s/\s*$//;
-        my %school = ( name => $name );
-        warn "NAME: $name\n";
-        my ( @keys, @vals );
-        my $tp = HTML::TableParser->new(
-            [
-                {
-                    id => '1.1.2.1',
-                    hdr => sub { 
-                        @keys = map { s![\s/]+!_!g; $_ } map lc( $_ ), map { split( "\000", $_ ) } @{$_[2]};
-                    },
-                    row => sub { @school{@keys} = @vals = map { split( "\000", $_ ) } @{$_[2]} },
-                },
-            ],
-            {
-                Decode => 1,
-                DecodeNBSP => 1,
-                Chomp => 1,
-                Trim => 1,
-            }
-        );
-        $tp->parse( $html );
-        @keys = ( @keys, 'lon', 'lat', 'name' );
+        my ( $name, %school );
         eval {
+            my $html = get( $school_link );
+            $html =~ s/\s*<BR>\s*/\000/g;
+            ( $name ) = $html =~ m{<big>(.*?)</big>};
+            die "no name" unless $name;
+            $name =~ s/^\s*//;
+            $name =~ s/\s*$//;
+            %school = ( name => $name );
+            my ( @keys, @vals );
+            my $tp = HTML::TableParser->new(
+                [
+                    {
+                        id => '1.1.2.1',
+                        hdr => sub { 
+                            @keys = map { s![\s/]+!_!g; $_ } map lc( $_ ), map { split( "\000", $_ ) } @{$_[2]};
+                        },
+                        row => sub { @school{@keys} = @vals = map { split( "\000", $_ ) } @{$_[2]} },
+                    },
+                ],
+                {
+                    Decode => 1,
+                    DecodeNBSP => 1,
+                    Chomp => 1,
+                    Trim => 1,
+                }
+            );
+            $tp->parse( $html );
+            @keys = ( @keys, 'lon', 'lat', 'name' );
+            die "no postcode" unless $school{postcode};
             ( $school{lat}, $school{lon} ) = $geo->coords( $school{postcode} );
-            warn "lat, lon = $school{lat}, $school{lon}\n";
-            warn "keys: ", join( ",", @keys ), "\n";
-            warn "vals: @vals\n";
-            warn Dumper( \%school );
             my $keys = join( ",", @keys );
             my $placeholders = join( ",", map "?", @keys );
             my $sql = " REPLACE INTO isi ( $keys ) VALUES ( $placeholders )";
-            warn $sql;
             my $sth = $dbh->prepare( $sql );
             $sth->execute( @school{@keys} );
         };
-        warn "ERROR: $@\n" if $@;
+        if ( $@ )
+        {
+            warn "FAILED: ", ( $name || $school_link ), ": $@\n";
+        }
+        else
+        {
+            warn "SUCCESS: $school{name}\n";
+        }
+        $result{$school_link} = $@;
     }
+    warn "SUCCESSFUL: ", scalar( grep { ! defined $result{$_} } keys %result ), "\n";
+    warn "FAILED: ", scalar( grep { defined $result{$_} } keys %result ), "\n";
 }
 
 sub update_dfes
 {
     warn "update dfes ...\n";
+    my %result;
     my @primary_keys = qw( name postcode );
     my @generic_keys = qw( address lat lon region lea );
     my %keys = (
@@ -305,7 +313,6 @@ sub update_dfes
     for my $type qw( secondary 16to18 primary )
     {
         my $type_link = $type_link{$type};
-        warn "type: $type: $type_link\n";
         my @keys = @{$keys{$type}};
         my $sql = 
             "INSERT INTO dfes (" . join( ",", @primary_keys,@generic_keys,@keys ) . ") " .
@@ -316,78 +323,74 @@ sub update_dfes
         my $tcp = HTML::TableContentParser->new();
         for my $regions_link ( get_links( $type_link, $re{regions} ) )
         {
-            warn "\t$regions_link\n";
             for my $region_link ( get_links( $regions_link, $re{region} ) )
             {
                 my ( $region ) = $region_link =~ $re{region};
-                warn "\t\tregion: $region: $region_link\n";
                 for my $lea_link ( get_links( $region_link, $re{lea} ) )
                 {
-                    eval {
-                        my ( $lea ) = $lea_link =~ $re{lea};
-                        warn "\t\t\tlea: $lea: $lea_link\n";
-                        my $html = get( $lea_link );
-                        die "get $lea_link failed" unless $html;
-                        my $tables = $tcp->parse($html);
-                        for my $t (@$tables) 
+                    my ( $lea ) = $lea_link =~ $re{lea};
+                    my $html = get( $lea_link );
+                    warn "get $lea_link failed" and next unless $html;
+                    my $tables = $tcp->parse($html);
+                    for my $t (@$tables) 
+                    {
+                        ROW: for my $r (@{$t->{rows}}) 
                         {
-                            ROW: for my $r (@{$t->{rows}}) 
+                            my @cells = map $_->{data}, @{$r->{cells}};
+                            my %values = (
+                                region => $region,
+                                lea => $lea,
+                            );
+                            next ROW unless my $name_cell = shift @cells;
+                            next ROW unless ( $values{url}, $values{name} ) = $name_cell =~ /href=\"([^"]+)"[^>]+title=\"([^"]+)"/;
+                            my $abs_url = URI->new_abs( $values{url}, $lea_link );
+                            $abs_url =~ s/\&amp;/&/g;
+                            my $school_html = get( $abs_url );
+                            warn "FAILED: get $values{url} failed\n" and next ROW unless $html;
+                            my @indexes = @{$indexes{$type}};
+                            my @data = @cells[@indexes];
+                            for ( @data )
                             {
-                                my @cells = map $_->{data}, @{$r->{cells}};
-                                my %values = (
-                                    region => $region,
-                                    lea => $lea,
-                                );
-                                next ROW unless my $name_cell = shift @cells;
-                                next ROW unless ( $values{url}, $values{name} ) = $name_cell =~ /href=\"([^"]+)"[^>]+title=\"([^"]+)"/;
-                                warn "name: $values{name}\n";
-                                warn "url: $values{url}\n";
-                                my $abs_url = URI->new_abs( $values{url}, $lea_link );
-                                $abs_url =~ s/\&amp;/&/g;
-                                warn "abs url: $abs_url\n";
-                                my $school_html = get( $abs_url );
-                                die "get $values{url} failed" unless $html;
-                                my @indexes = @{$indexes{$type}};
-                                my @data = @cells[@indexes];
-                                for ( @data )
-                                {
-                                    next ROW unless defined $_ && /^[\d.]+\%?$/;
-                                    s/%$//;
-                                }
-                                eval {
-                                    ( $values{address} ) = $school_html =~ m{
-                                        <h3>[^<]+</h3>
-                                        (.*?)
-                                        (?:<p>|<br\s*/><br\s*/>)
-                                    }six;
-                                    die "no address\n" unless $values{address};
-                                    $values{address} =~ s/^\s*//;
-                                    $values{address} =~ s/\s*$//;
-                                    my @address = split( /\s*<br\s*\/>\s*/, $values{address} );
-                                    for ( @address )
-                                    {
-                                        $values{postcode} = $1 if /([A-Z]+[0-9][0-9A-Z]*\s+[0-9][A-Z0-9]+)/msi;
-                                    }
-                                    $values{address} = join( ", ", @address );
-                                    die "no postcode\n" unless $values{postcode};
-                                    warn "postcode: $values{postcode}\n";
-                                    ( $values{lat}, $values{lon} ) = $geo->coords( $values{postcode} );
-                                    warn "lat, lon = $values{lat}, $values{lon}\n";
-                                    my @args = ( @values{@primary_keys}, @values{@generic_keys}, $abs_url, @data, $abs_url, @data );
-                                    warn "replace $values{name} ....\n";
-                                    warn "SQL: $sql\n";
-                                    warn "ARGS: @args\n";
-                                    $sth->execute( @args );
-                                };
-                                warn "$values{url} failed: $@\n" if $@;
+                                next ROW unless defined $_ && /^[\d.]+\%?$/;
+                                s/%$//;
                             }
+                            eval {
+                                ( $values{address} ) = $school_html =~ m{
+                                    <h3>[^<]+</h3>
+                                    (.*?)
+                                    (?:<p>|<br\s*/><br\s*/>)
+                                }six;
+                                die "no address" unless $values{address};
+                                $values{address} =~ s/^\s*//;
+                                $values{address} =~ s/\s*$//;
+                                my @address = split( /\s*<br\s*\/>\s*/, $values{address} );
+                                for ( @address )
+                                {
+                                    $values{postcode} = $1 if /([A-Z]+[0-9][0-9A-Z]*\s+[0-9][A-Z0-9]+)/msi;
+                                }
+                                $values{address} = join( ", ", @address );
+                                die "no postcode" unless $values{postcode};
+                                ( $values{lat}, $values{lon} ) = $geo->coords( $values{postcode} );
+                                my @args = ( @values{@primary_keys}, @values{@generic_keys}, $abs_url, @data, $abs_url, @data );
+                                $sth->execute( @args );
+                            };
+                            if ( $@ )
+                            {
+                                warn "FAILED: $abs_url: $@\n";
+                            }
+                            else
+                            {
+                                warn "SUCCESS: $values{name}\n";
+                            }
+                            $result{$abs_url} = $@;
                         }
-                    };
-                    warn $@ if $@;
+                    }
                 }
             }
         }
     }
+    warn "SUCCESSFUL: ", scalar( grep { ! defined $result{$_} } keys %result ), "\n";
+    warn "FAILED: ", scalar( grep { defined $result{$_} } keys %result ), "\n";
     warn "update dfes finished\n";
 }
 

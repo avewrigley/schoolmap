@@ -56,7 +56,7 @@ sub coords
     my $self = shift;
     my %output = $self->find( @_ );
     my ( $lat, $lon ) = @output{qw(lat lon)};
-    die "no lat / lon\n" unless defined $lat && defined $lon;
+    die "no lat / lon" unless defined $lat && defined $lon;
     return ( $lat, $lon );
 }
 
@@ -64,15 +64,12 @@ sub db_find
 {
     my $self = shift;
     my $postcode = shift;
-    warn "db lookup $postcode\n";
     $self->{ssth}->execute( $postcode );
     my $output = $self->{ssth}->fetchrow_hashref;
     if ( $output )
     {
-        warn map "$_ = $output->{$_}\n", keys %$output;
         return $output;
     }
-    warn "$postcode not found in db\n";
     return;
 }
 
@@ -85,24 +82,20 @@ sub find
     my $output = $self->db_find( $postcode );
     return %$output if $output;
     my $mmu = "$multimap_url$postcode";
-    warn "$mmu\n";
     my ( $lat, $lon );
     for ( get_text_nodes( $mmu, _tag => 'dd' ) )
     {
         if ( /\d{1,2}:\d{1,2}:\d{1,2}[NS] \((-?[0-9.]+)\)/ )
         {
             $lat = $1;
-            warn "lat: $lat\n";
         }
         elsif ( /\d{1,2}:\d{1,2}:\d{1,2}[EW] \((\-?[0-9.]+)\)/ )
         {
             $lon = $1;
-            warn "lon: $lon\n";
         }
         last if $lat && $lon;
     }
     return unless $lat && $lon;
-    warn "insert $postcode, $lat, $lon\n";
     $self->{isth}->execute( $postcode, $lat, $lon );
     return ( code => $postcode, lat => $lat, lon => $lon );
 }
