@@ -8,7 +8,7 @@ var max_zoom = 15;
 var postcodePt;
 var cgi_url = "cgi/schools.cgi";
 var modperl_url = "schools";
-var schools_url = cgi_url;
+var schools_url = modperl_url;
 var nearby_url = "http://www.nearby.org.uk/";
 var icon_root_url = 'http://bluweb.com/us/chouser/gmapez/iconEZ2/';
 var schools;
