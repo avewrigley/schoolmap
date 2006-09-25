@@ -14,45 +14,58 @@ sub new
     my @what = ( 
         "dfes.*",
         "ofsted.*",
+        "school.*",
+        "isi.*",
         "ofsted.url AS ofsted_url",
-        "ofsted.type AS ofsted_type"
+        "isi.url AS isi_url",
+        "dfes.url AS dfes_url",
     );
-    if ( $self->{orderBy} eq 'distance' )
+    $self->{args} = [];
+    if ( $self->{orderBy} && $self->{orderBy} eq 'distance' )
     {
         push( 
             @what, 
-            "acos( ( sin( ? ) * sin( ofsted.lat ) ) + ( cos( ? ) * cos( ofsted.lat ) * cos( ofsted.lon - ? ) ) ) AS cos_dist"
+            "(((acos(sin((?*pi()/180)) * sin((school.lat*pi()/180)) + cos((?*pi()/180)) * cos((school.lat*pi()/180)) * cos(((? - school.lon)*pi()/180))))*180/pi())*60*1.1515) as geo_dist",
+            # "acos( ( sin( ? ) * sin( school.lat ) ) + ( cos( ? ) * cos( school.lat ) * cos( school.lon - ? ) ) ) AS geo_dist"
         );
+        $self->{args} = [
+            $self->{centreY},
+            $self->{centreY},
+            $self->{centreX}, 
+        ];
     }
     $self->{what} = join( ",", @what );
-    $self->{from} = "FROM ofsted LEFT JOIN dfes ON dfes.name = ofsted.name AND dfes.postcode = ofsted.postcode";
     my @where = ();
-    if ( $self->{type} )
+    if ( $self->{source} )
     {
-        my @types = ref( $self->{type} ) eq 'ARRAY' ? @{$self->{type}} : ( $self->{type} );
-        if ( @types )
-        {
-            push( 
-                @where, 
-                "(" . join( " OR ", map( "pupils_$_ <> 0", @types ) ) . ")" 
-            );
-        }
+        $self->{what} = "*";
+        push( @where, "$self->{source}.school_id = school.school_id" );
+        $self->{from} = "FROM school, $self->{source}";
     }
-    my $ofstedType = $self->{ofstedType};
-    if ( $ofstedType && $ofstedType ne 'all' )
+    else
     {
-        warn "ofstedType: $ofstedType\n";
-        push( @where, "ofsted.type = '$ofstedType'" );
+        $self->{from} = <<EOF;
+FROM school 
+    LEFT JOIN ofsted ON ofsted.school_id = school.school_id 
+    LEFT JOIN dfes ON dfes.school_id = school.school_id
+    LEFT JOIN isi ON isi.school_id = school.school_id
+EOF
+    }
+    my $type = $self->{type};
+    if ( $type && $type ne 'all' )
+    {
+        warn "type: $type\n";
+        push( @where, "school.type = '$type'" );
     }
     if ( $self->{minX} )
     {
         push( 
             @where,
             (
-                "ofsted.lon > $self->{minX}",
-                "ofsted.lon < $self->{maxX}",
-                "ofsted.lat > $self->{minY}",
-                "ofsted.lat < $self->{maxY}",
+                "school.lon > $self->{minX}",
+                "school.lon < $self->{maxX}",
+                "school.lat > $self->{minY}",
+                "school.lat < $self->{maxY}",
             )
         );
     }
@@ -107,44 +120,32 @@ sub add_distance
 sub schools_xml
 {
     my $self = shift;
-    my $sth;
     my $nschools = $self->schools_count();
     warn "nschools: $nschools\n";
     my $xml = "<data><schools nschools=\"$nschools\">";
-    if ( $self->{orderBy} eq 'distance' )
+    my $sql = "SELECT $self->{what} $self->{from} $self->{where}";
+    if ( $self->{orderBy} )
     {
-        my $sql = <<EOF;
-SELECT $self->{what} $self->{from} $self->{where}
-ORDER BY cos_dist
-EOF
-        $sql .= " LIMIT $self->{limit}" if $self->{limit};
-        warn "$self->{centreY}, $self->{centreY}, $self->{centreX}\n";
-        warn $sql;
-        $sth = $self->{dbh}->prepare( $sql );
-        $sth->execute( 
-            $self->{centreY},
-            $self->{centreY},
-            $self->{centreX}, 
-        );
+        if ( $self->{orderBy} eq 'distance' )
+        {
+            $sql .= " ORDER BY geo_dist";
+        }
+        else
+        {
+            $sql .= " ORDER BY $self->{orderBy} DESC";
+        }
     }
-    else
-    {
-        my $sql = <<EOF;
-SELECT $self->{what} $self->{from} $self->{where}
-ORDER BY $self->{orderBy} DESC
-EOF
-        $sql .= " LIMIT $self->{limit}" if $self->{limit};
-        warn "$sql\n";
-        $sth = $self->{dbh}->prepare( $sql );
-        $sth->execute();
-    }
+    $sql .= " LIMIT $self->{limit}" if $self->{limit};
+    warn "$sql\n";
+    warn "ARGS: @{$self->{args}}\n";
+    my $sth = $self->{dbh}->prepare( $sql );
+    $sth->execute( @{$self->{args}} );
     while ( my $school = $sth->fetchrow_hashref )
     {
         $self->add_distance( $school );
         $xml .= $self->school_xml( $school ) . "\n";
     }
     $xml .= "</schools></data>";
-    warn $xml;
     return $xml;
 }
 
@@ -159,7 +160,7 @@ sub school_xml
             '"' .
             encode_entities( $school->{$_}, '<>&"' ) .
             '"', 
-            grep { length $school->{$_} } keys %$school 
+            grep { defined $school->{$_} && length $school->{$_} } keys %$school 
         ) ) .
         "/>"
     ;

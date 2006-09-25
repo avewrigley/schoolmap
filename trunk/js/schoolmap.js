@@ -8,20 +8,20 @@ var max_zoom = 15;
 var postcodePt;
 var cgi_url = "cgi/schools.cgi";
 var modperl_url = "schools";
-var schools_url = modperl_url;
+var schools_url = cgi_url;
 var nearby_url = "http://www.nearby.org.uk/";
 var icon_root_url = 'http://bluweb.com/us/chouser/gmapez/iconEZ2/';
 var schools;
 
-var types = new Array();
+var dfes_types = new Array();
 
-var dfes_type_names = {
-    "16to18":"GCE and VCE",
+var type2keystage = {
+    post16:"GCE and VCE",
     secondary:"GCSE",
     primary:"Key stage 2"
 };
 
-var ofsted_type_names = {
+var types = {
     secondary:"Secondary",
     post16:"Sixteen Plus",
     primary:"Primary",
@@ -40,6 +40,7 @@ var default_order = {
 var explanation = {
     "name":"Name of school",
     "ofsted report":"link to Ofsted report for this school",
+    "isi report":"link to Independent Schools Inspectorate report for this school",
     "pupils_16to18":"Number of students aged 16-18",
     "average_16to18":"GCE and VCE results: average point score per student",
     "average_primary":"Key Stage 2: average point score",
@@ -131,12 +132,12 @@ function getOptions( sel )
 
 function setDefaultOrder()
 {
-    var ofsted_type = document.forms[0].ofsted_type.value;
-    if ( default_order[ofsted_type] )
+    var type = document.forms[0].type.value;
+    if ( default_order[type] )
     {
-        document.forms[0].order_by.value = default_order[ofsted_type];
+        document.forms[0].order_by.value = default_order[type];
     }
-    if ( postcodePt && ofsted_type == "all" )
+    if ( postcodePt && type == "all" )
     {
         document.forms[0].order_by.value = "distance";
     }
@@ -200,7 +201,7 @@ function getSchoolsCallback( response )
 function getSchools()
 {
     if ( noRedraw ) return;
-    var ofsted_type = document.forms[0].ofsted_type.value;
+    var type = document.forms[0].type.value;
     var order_by = document.forms[0].order_by.value;
     var url;
     var top = "";
@@ -218,7 +219,7 @@ function getSchools()
         "finding the " + 
         document.forms[0].limit.value + " " +
         top +
-        ofsted_type +
+        type +
         " schools" +
         closest +
         "(ordered by " +
@@ -227,7 +228,7 @@ function getSchools()
     ); 
     var bounds = map.getExtent();
     url = schools_url + "?" +
-        "ofstedType=" + escape( ofsted_type ) +
+        "type=" + escape( type ) +
         "&orderBy=" + escape( order_by ) +
         "&limit=" + escape( document.forms[0].limit.value )
     ;
@@ -291,7 +292,7 @@ function addPopup()
 function createSchoolMarker( school, colour ) 
 {
     try {
-        school.letter = getLetter( school.ofsted_type );
+        school.letter = getLetter( school.type );
         var point = new OpenLayers.LonLat( school.lon, school.lat );
         var marker = createMarker( school.letter, colour, point );
         // marker.events.register( "mouseover", marker, mouseOver );
@@ -307,23 +308,23 @@ function createSchoolMarker( school, colour )
 function initTypes()
 {
     removeChildren( document.forms[0].order_by );
-    types = new Array();
-    for ( var type in dfes_type_names )
+    dfes_types = new Array();
+    for ( var dfes_type in type2keystage )
     {
-        addOpt( document.forms[0].order_by, dfes_type_names[type] + " results", "average_" + type );
-        types.push( type );
+        addOpt( document.forms[0].order_by, type2keystage[dfes_type] + " results", "average_" + dfes_type );
+        dfes_types.push( dfes_type );
     }
     if ( postcodePt )
     {
         var postcode = document.forms[0].postcode.value;
         addOpt( document.forms[0].order_by, "Distance from " + postcode, "distance" );
     }
-    removeChildren( document.forms[0].ofsted_type );
-    for ( var ofsted_type in ofsted_type_names )
+    removeChildren( document.forms[0].type );
+    for ( var type in types )
     {
-        addOpt( document.forms[0].ofsted_type, ofsted_type_names[ofsted_type], ofsted_type );
+        addOpt( document.forms[0].type, types[type], type );
     }
-    document.forms[0].ofsted_type.value = "all";
+    document.forms[0].type.value = "all";
 }
 
 function initTableHead()
@@ -337,13 +338,17 @@ function initTableHead()
     obj["name"] = "ofsted report";
     obj["orderable"] = false;
     ths.push( obj );
-    for ( var i = 0; i < types.length; i++ )
+    var obj = new Object();
+    obj["name"] = "isi report";
+    obj["orderable"] = false;
+    ths.push( obj );
+    for ( var i = 0; i < dfes_types.length; i++ )
     {
-        var type = types[i];
+        var dfes_type = dfes_types[i];
         obj = new Object();
         obj["keys"] = new Array();
-        var average = { "name":"average", "orderable":true, "type":type };
-        var pupils = { "name":"pupils", "orderable":false, "type":type };
+        var average = { "name":"average", "orderable":true, "dfes_type":dfes_type };
+        var pupils = { "name":"pupils", "orderable":false, "dfes_type":dfes_type };
         obj["keys"].push( average );
         obj["keys"].push( pupils );
         obj["orderable"] = true;
@@ -415,12 +420,12 @@ function createListTd( text, url, school, onclick, wrap )
     return td;
 }
 
-function addCell( tr, type, keyname, school )
+function addCell( tr, dfes_type, keyname, school )
 {
     var val = "-";
-    var key = keyname + "_" + type;
+    var key = keyname + "_" + dfes_type;
     if ( school[key] && school[key] != 0 ) val = school[key];
-    var url = school["url_" + type];
+    var url = school["url_" + dfes_type];
     var onclick = function() { window.open( url, "_new", "status,scrollbars" ); return false; };
     tr.appendChild( createListTd( val, url, school, onclick ) );
 }
@@ -434,15 +439,19 @@ function createListRow( school )
     if ( school.ofsted_url ) ofsted = "yes";
     var onclick = function() { window.open( school.ofsted_url, "_new", "status,scrollbars" ); return false; };
     tr.appendChild( createListTd( ofsted, school.ofsted_url, school, onclick ) );
-    for ( var i = 0; i < types.length; i++ )
+    var isi = "no";
+    if ( school.isi_url ) isi = "yes";
+    var onclick = function() { window.open( school.isi_url, "_new", "status,scrollbars" ); return false; };
+    tr.appendChild( createListTd( isi, school.isi_url, school, onclick ) );
+    for ( var i = 0; i < dfes_types.length; i++ )
     {
-        var type = types[i];
-        addCell( tr, type, "average", school );
-        addCell( tr, type, "pupils", school );
+        var dfes_type = dfes_types[i];
+        addCell( tr, dfes_type, "average", school );
+        addCell( tr, dfes_type, "pupils", school );
     }
-    var ofsted_type = "-";
-    if ( school.ofsted_type ) ofsted_type = school.ofsted_type;
-    tr.appendChild( createListTd( ofsted_type ) );
+    var type = "-";
+    if ( school.type ) type = school.type;
+    tr.appendChild( createListTd( type ) );
     if ( postcodePt )
     {
         var dist = school.distance;
@@ -465,10 +474,10 @@ function getSymbol( label )
     return span;
 }
 
-function createHeadCell( tr, name, orderable, type )
+function createHeadCell( tr, name, orderable, dfes_type )
 {
     var key = name;
-    if ( type ) key = name + "_" + type;
+    if ( dfes_type ) key = name + "_" + dfes_type;
     var th = document.createElement( "TH" );
     th.style.verticalAlign = "top";
     tr.appendChild( th );
@@ -504,7 +513,7 @@ function createListTable()
             var th = document.createElement( "TH" );
             tr.appendChild( th );
             th.colSpan = 2;
-            th.appendChild( document.createTextNode( dfes_type_names[key.type] ) );
+            th.appendChild( document.createTextNode( type2keystage[key.dfes_type] ) );
         }
         else
         {
@@ -522,7 +531,7 @@ function createListTable()
             var keys = ths[i].keys;
             for ( var j = 0; j < keys.length; j++ )
             {
-                createHeadCell( tr, keys[j].name, keys[j].orderable, keys[j].type );
+                createHeadCell( tr, keys[j].name, keys[j].orderable, keys[j].dfes_type );
             }
         }
         else
