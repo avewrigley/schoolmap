@@ -22,9 +22,10 @@
 <input type="submit" name="gotoclear" value="clear" onclick="clearPostcode(); return false" />
 </td>
 <td align="right">
-    <b>type:</b> <select name="ofsted_type" onchange="setDefaultOrder();getSchools()"><option /></select>
+    <b>type:</b> <select name="type" onchange="setDefaultOrder();getSchools()"><option /></select>
 <b>no. schools:</b>
 <select name="limit" onchange="getSchools()">
+    <option value="1">1</option>
     <option value="5">5</option>
     <option value="10">10</option>
     <option value="15">15</option>
