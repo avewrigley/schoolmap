@@ -11,15 +11,7 @@ sub new
     my $self = bless { @_ }, $class;
     require DBI;
     $self->{dbh} = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
-    my @what = ( 
-        "dfes.*",
-        "ofsted.*",
-        "school.*",
-        "isi.*",
-        "ofsted.url AS ofsted_url",
-        "isi.url AS isi_url",
-        "dfes.url AS dfes_url",
-    );
+    my @what = ( "*" );
     $self->{args} = [];
     if ( $self->{orderBy} && $self->{orderBy} eq 'distance' )
     {
@@ -34,33 +26,43 @@ sub new
             $self->{centreX}, 
         ];
     }
-    $self->{what} = join( ",", @what );
     my @where = ();
-    if ( $self->{source} )
+    if ( $self->{source} && $self->{source} ne 'all' )
     {
-        $self->{what} = "*";
         push( @where, "$self->{source}.school_id = school.school_id" );
         $self->{from} = "FROM school, $self->{source}";
     }
-    else
-    {
-        $self->{from} = <<EOF;
+    $self->{from} = <<EOF;
 FROM school 
     LEFT JOIN ofsted ON ofsted.school_id = school.school_id 
     LEFT JOIN dfes ON dfes.school_id = school.school_id
     LEFT JOIN isi ON isi.school_id = school.school_id
 EOF
-    }
+    $self->{what} = join( ",", @what );
     my $type = $self->{type};
     if ( $type && $type ne 'all' )
     {
         warn "type: $type\n";
         push( @where, "school.type = '$type'" );
     }
-    if ( $self->{minX} )
+    my ( @select_where, @count_where );
+    @select_where = @count_where = @where;
+    if ( $self->{minX} && $self->{maxX} && $self->{minY} && $self->{maxY} )
     {
+        if ( $self->{orderBy} ne 'distance' )
+        {
+            push( 
+                @select_where,
+                (
+                    "school.lon > $self->{minX}",
+                    "school.lon < $self->{maxX}",
+                    "school.lat > $self->{minY}",
+                    "school.lat < $self->{maxY}",
+                )
+            );
+        }
         push( 
-            @where,
+            @count_where,
             (
                 "school.lon > $self->{minX}",
                 "school.lon < $self->{maxX}",
@@ -69,18 +71,19 @@ EOF
             )
         );
     }
-    $self->{where} = @where ? "WHERE " . join( " AND ", @where ) : '';
+    $self->{select_where} = @select_where ? "WHERE " . join( " AND ", @select_where ) : '';
+    $self->{count_where} = @count_where ? "WHERE " . join( " AND ", @count_where ) : '';
     require Geo::Distance;
     $self->{geo} = Geo::Distance->new;
     $self->{geo}->formula( "cos" );
     return $self;
 }
 
-sub schools_count
+sub count
 {
     my $self = shift;
     my $sql = <<EOF;
-SELECT count( * ) $self->{from} $self->{where}
+SELECT count( * ) $self->{from} $self->{count_where}
 EOF
     warn $sql;
     my $sth = $self->{dbh}->prepare( $sql );
@@ -89,21 +92,41 @@ EOF
     return $nschools;
 }
 
-sub types
+my %label = (
+    secondary => "Secondary",
+    post16 => "Sixteen Plus",
+    primary => "Primary",
+    independent => "Independent",
+    nursery => "Nursery",
+    sen => "Special School",
+    pru => "Pupil Referral Unit",
+);
+
+sub types_xml
 {
     my $self = shift;
-    my $sql = <<EOF;
-SELECT DISTINCT type from dfes
-EOF
-    warn $sql;
+    my $sql = "SELECT DISTINCT type from school";
+    if ( $self->{source} && $self->{source} ne 'all' )
+    {
+        $sql = "SELECT DISTINCT type from school,$self->{source} WHERE $self->{source}.school_id = school.school_id";
+    }
     my $sth = $self->{dbh}->prepare( $sql );
     $sth->execute();
-    my @types;
+    my $xml = "<types>";
     while ( my ( $type ) = $sth->fetchrow_array )
     {
-        push( @types, $type );
+        $xml .= 
+            '<type name="' . 
+            encode_entities( $type, '<>&"' )  .
+            '" label="' .
+            encode_entities( $label{$type}, '<>&"' )  .
+            '"/>'
+        ;
     }
-    return join( ",", @types );
+    $sth->finish();
+    $xml .= "</types>";
+    warn $xml;
+    return $xml;
 }
 
 sub add_distance
@@ -120,10 +143,7 @@ sub add_distance
 sub schools_xml
 {
     my $self = shift;
-    my $nschools = $self->schools_count();
-    warn "nschools: $nschools\n";
-    my $xml = "<data><schools nschools=\"$nschools\">";
-    my $sql = "SELECT $self->{what} $self->{from} $self->{where}";
+    my $sql = "SELECT $self->{what} $self->{from} $self->{select_where}";
     if ( $self->{orderBy} )
     {
         if ( $self->{orderBy} eq 'distance' )
@@ -140,12 +160,18 @@ sub schools_xml
     warn "ARGS: @{$self->{args}}\n";
     my $sth = $self->{dbh}->prepare( $sql );
     $sth->execute( @{$self->{args}} );
+    my $nrows = $sth->rows;
+    my $nschools = $self->count();
+    $nschools = $nrows if $nrows > $nschools;
+    warn "nschools: $nschools\n";
+    my $xml = "<data><schools nschools=\"$nschools\">";
     while ( my $school = $sth->fetchrow_hashref )
     {
         $self->add_distance( $school );
         $xml .= $self->school_xml( $school ) . "\n";
     }
     $xml .= "</schools></data>";
+    warn $xml;
     return $xml;
 }
 

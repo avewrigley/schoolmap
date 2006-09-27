@@ -64,6 +64,7 @@ sub get_links
     my $url = shift;
     my $re = shift;
     my $lx = new HTML::LinkExtractor();
+    warn "get $url\n";
     my $html = get( $url );
     warn "get $url failed" and return () unless $html;
     return @{$links{$url}{$re}} if $links{$url}{$re};
@@ -76,7 +77,7 @@ sub get_links
         grep { $_->{href} }
         @{$lx->links}
     ;
-    $links{$url}{$re} = [ keys %l ];
+    $links{$url}{$re} = [ sort keys %l ];
     return @{$links{$url}{$re}};
 }
 
@@ -89,16 +90,19 @@ sub create_school
     die "no postcode" unless $postcode;
     my ( $lat, $lon ) = $geo->coords( $postcode );
     die "no lat / lon for postcode $postcode" unless $lat && $lon;
-    my $replace_sth = $dbh->prepare( <<SQL );
-REPLACE INTO school ( name, postcode, lat, lon, type ) VALUES ( ?,?,?,?,? )
-SQL
-    $replace_sth->execute( $name, $postcode, $lat, $lon, $type );
-    $replace_sth->finish();
     my $select_sth = $dbh->prepare( <<SQL );
 SELECT school_id FROM school WHERE name = ? AND postcode = ?
 SQL
     $select_sth->execute( $name, $postcode );
     my ( $school_id ) = $select_sth->fetchrow;
+    return $school_id if defined $school_id;
+    my $insert_sth = $dbh->prepare( <<SQL );
+INSERT INTO school ( name, postcode, lat, lon, type ) VALUES ( ?,?,?,?,? )
+SQL
+    $insert_sth->execute( $name, $postcode, $lat, $lon, $type );
+    $insert_sth->finish();
+    $select_sth->execute( $name, $postcode );
+    ( $school_id ) = $select_sth->fetchrow;
     $select_sth->finish();
     return $school_id;
 }
@@ -147,16 +151,18 @@ SQL
 
     sub update_report
     {
-        my $url = shift;
         my $error = shift;
+        my $url = shift;
+        my $name = shift;
+        my $description = $name ? "$name ($url)" : $url;
         if ( $error )
         {
-            warn "FAILED: $url: $error\n";
+            warn "FAILED: $description: $error\n";
             $result{$url} = $error;
         }
         else
         {
-            warn "SUCCESS: $url\n";
+            warn "SUCCESS: $description\n";
             set_modtime( $url );
         }
     }
@@ -172,7 +178,7 @@ $update{ofsted} = sub {
     warn "update ofsted ...\n";
     my %result;
     my $base = 'http://www.ofsted.gov.uk/reports/';
-    my @fields = qw( ofsted_school_id school_id url lea_id region_id address );
+    my @fields = qw( ofsted_school_id school_id ofsted_url lea_id region_id address );
 
     my $fields = join( ",", @fields );
     my @placeholders = map "?", @fields;
@@ -208,7 +214,7 @@ SQL
                         $school{ofsted_school_id} = $school_id;
                         $school{region_id} = $region_id;
                         $school{lea_id} = $lea_id;
-                        $school{url} = $school_url;
+                        $school{ofsted_url} = $school_url;
                         eval {
                             my $html = get( $school_url );
                             die "Can't get $school_url\n" unless $html;
@@ -229,7 +235,7 @@ SQL
                             die "no address" unless $school{address};
                             $sth->execute( @school{@fields} );
                         };
-                        update_report( $school_url, $@ );
+                        update_report( $@, $school_url, $name );
                     }
                     my @pages = get_links( $type, $re{page} );
                     my $next;
@@ -266,7 +272,7 @@ $update{isi} = sub {
             die "no name" unless $name;
             $name =~ s/^\s*//;
             $name =~ s/\s*$//;
-            %school = ( url => $school_url );
+            %school = ( isi_url => $school_url );
             my ( @keys, @vals );
             my $tp = HTML::TableParser->new(
                 [
@@ -294,7 +300,7 @@ $update{isi} = sub {
             my $sth = $dbh->prepare( $sql );
             $sth->execute( values %school );
         };
-        update_report( $school_url, $@ );
+        update_report( $@, $school_url, $name );
     }
     print_report();
 };
@@ -302,7 +308,7 @@ $update{isi} = sub {
 $update{dfes} = sub {
     warn "update dfes ...\n";
     my %result;
-    my @generic_keys = qw( school_id url address region lea );
+    my @generic_keys = qw( school_id dfes_url address region lea );
     my %keys = (
         post16 => [ qw( 
             url_post16 
@@ -393,7 +399,7 @@ $update{dfes} = sub {
                             eval {
                                 my $school_html = get( $school_url );
                                 die "get $school_url failed\n" unless $school_html;
-                                $school{url} = $school_url;
+                                $school{dfes_url} = $school_url;
                                 ( $school{address} ) = $school_html =~ m{
                                     <h3>[^<]+</h3>
                                     (.*?)
@@ -412,7 +418,7 @@ $update{dfes} = sub {
                                 my @args = ( @school{@generic_keys}, $school_url, @data );
                                 $sth->execute( @args );
                             };
-                            update_report( $school_url, $@ );
+                            update_report( $@, $school_url, $name );
                         }
                     }
                 }
