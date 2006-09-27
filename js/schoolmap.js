@@ -32,20 +32,12 @@ var sources = {
     all:"All"
 };
 
-var default_order = {
-    secondary:"average_secondary",
-    post16:"average_16to18",
-    independent:"average_16to18",
-    primary:"average_primary",
-    all:"average_secondary"
-};
-
 var explanation = {
     "name":"Name of school",
     "ofsted report":"link to Ofsted report for this school",
     "isi report":"link to Independent Schools Inspectorate report for this school",
-    "pupils_16to18":"Number of students aged 16-18",
-    "average_16to18":"GCE and VCE results: average point score per student",
+    "pupils_post16":"Number of students aged 16-18",
+    "average_post16":"GCE and VCE results: average point score per student",
     "average_primary":"Key Stage 2: average point score",
     "pupils_primary":"Total pupils eligible for Key Stage 2 assesment",
     "average_secondary":"GCSE (and equivalent) results: average total point score per pupil",
