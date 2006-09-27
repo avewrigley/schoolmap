@@ -155,10 +155,10 @@ SQL
         my $url = shift;
         my $name = shift;
         my $description = $name ? "$name ($url)" : $url;
+        $result{$url} = $error;
         if ( $error )
         {
             warn "FAILED: $description: $error\n";
-            $result{$url} = $error;
         }
         else
         {
@@ -176,7 +176,6 @@ SQL
 
 $update{ofsted} = sub {
     warn "update ofsted ...\n";
-    my %result;
     my $base = 'http://www.ofsted.gov.uk/reports/';
     my @fields = qw( ofsted_school_id school_id ofsted_url lea_id region_id address );
 
@@ -307,7 +306,6 @@ $update{isi} = sub {
 
 $update{dfes} = sub {
     warn "update dfes ...\n";
-    my %result;
     my @generic_keys = qw( school_id dfes_url address region lea );
     my %keys = (
         post16 => [ qw( 
