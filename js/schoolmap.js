@@ -16,6 +16,7 @@ var nearby_url = "http://www.nearby.org.uk/";
 var icon_root_url = 'http://bluweb.com/us/chouser/gmapez/iconEZ2/';
 var schools;
 var noRedraw = false;
+var params = new Object();
 
 var dfes_types = new Array();
 
@@ -426,10 +427,25 @@ function initSources()
     for ( var source in sources )
         addOpt( document.forms[0].source, sources[source], source );
     document.forms[0].source.value = "all";
+    if ( params.source ) document.forms[0].source.value = params.source;
+}
+
+function getQueryVariables() 
+{
+    var query = window.location.search.substring( 1 );
+    var vars = query.split( "&" );
+    for ( var i = 0; i < vars.length; i++ ) 
+    {
+        var pair = vars[i].split( "=" );
+        var key = unescape( pair[0] );
+        var val = unescape( pair[1] );
+        params[key] = val;
+    } 
 }
 
 function initMap()
 {
+    getQueryVariables();
     // logreader = new YAHOO.widget.LogReader();
     var oACDS = new YAHOO.widget.DS_XHR( postcodes_url, ["\n", "\t"]); 
     oACDS.responseType = YAHOO.widget.DS_XHR.prototype.TYPE_FLAT; 
@@ -452,9 +468,11 @@ function initMap()
     initSources();
     map.zoomTo( default_zoom );
     setOrderBy();
-    initTypes();
     map.events.register( "zoomend", map, getSchools );
     map.events.register( "moveend", map, getSchools );
+    if ( params.postcode ) document.forms[0].postcode.value = params.postcode;
+    if ( params.limit ) document.forms[0].limit.value = params.limit;
+    initTypes();
 }
 
 function createListTd( text, url, school, onclick, wrap )
