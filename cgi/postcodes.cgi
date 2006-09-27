@@ -10,27 +10,24 @@
 use strict;
 use warnings;
 
-use lib "../lib";
-require Schools;
-require CGI::Lite;
+require DBI;
 
-open( STDERR, ">>../logs/schools.log" );
+open( STDERR, ">>../logs/postcodes.log" );
 warn "$$ at ", scalar( localtime ), "\n";
-my %formdata = CGI::Lite->new->parse_form_data();
-warn map "$_ = $formdata{$_}\n", keys %formdata if %formdata;
-my $ofsted = Schools->new( %formdata );
-my $xml;
-print "Content-Type: text/xml\n\n";
-if ( exists $formdata{types} )
+warn "query string: $ENV{QUERY_STRING}\n";
+my ( $query ) = $ENV{QUERY_STRING} =~ /query=(.*)/;
+warn "query: $query\n";
+print "Content-Type: text/plain\n\n";
+my $dbh = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
+my $sql = "SELECT code FROM postcode WHERE code LIKE '$query%' LIMIT 10";
+warn "$sql\n";
+my $sth = $dbh->prepare( $sql );
+$sth->execute();
+while ( my ( $postcode ) = $sth->fetchrow )
 {
-    $xml = $ofsted->types_xml();
+    warn "$postcode\n";
+    print "$postcode\n";
 }
-else
-{
-    $xml = $ofsted->schools_xml();
-}
-# warn $xml;
-print $xml;
 
 #------------------------------------------------------------------------------
 #

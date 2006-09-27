@@ -1,17 +1,21 @@
+var logreader;
 var googleDiv;
 var google_html;
 var map;
-var markers;
+var markersLayer;
 var default_centre;
 var default_zoom = 6;
 var max_zoom = 15;
 var postcodePt;
+var postcode_url = "cgi/postcode.cgi";
+var postcodes_url = "cgi/postcodes.cgi";
 var cgi_url = "cgi/schools.cgi";
 var modperl_url = "schools";
 var schools_url = cgi_url;
 var nearby_url = "http://www.nearby.org.uk/";
 var icon_root_url = 'http://bluweb.com/us/chouser/gmapez/iconEZ2/';
 var schools;
+var noRedraw = false;
 
 var dfes_types = new Array();
 
@@ -21,11 +25,10 @@ var type2keystage = {
     primary:"Key stage 2"
 };
 
-var types = {
-    secondary:"Secondary",
-    post16:"Sixteen Plus",
-    primary:"Primary",
-    independent:"Independent",
+var sources = {
+    ofsted:"Ofsted",
+    isi:"Independent Schools Inspectorate",
+    dfes:"DfES",
     all:"All"
 };
 
@@ -60,7 +63,7 @@ function clearPostcode()
     document.forms[0].postcode.value = "";
     postcodePt = false;
     childReplace( nearbyDiv, document.createTextNode( '' ) );
-    setDefaultOrder();
+    setOrderBy();
     getSchools();
 }
 
@@ -81,8 +84,8 @@ function getPostcode()
     childReplace( nearbyDiv, a );
     document.forms[0].gotobutton.disabled = true;
     setStatus( "finding " + postcode ); 
-    var url = "cgi/postcode.cgi?postcode=" + escape( postcode );
-    var transaction = YAHOO.util.Connect.asyncRequest( 'GET', url, { success:getPostcodeCallback } );
+    var url = postcode_url + "?postcode=" + escape( postcode );
+    get( url, getPostcodeCallback );
 }
 
 function getPostcodeCallback( response )
@@ -94,9 +97,9 @@ function getPostcodeCallback( response )
     var code = coords[0].getAttribute( "code" );
     document.forms[0].postcode.value = code;
     postcodePt = new OpenLayers.LonLat( x, y );
+    createMarker( "X", "red", postcodePt );
     map.setCenter( postcodePt );
-    initTypes();
-    setDefaultOrder();
+    setOrderBy();
     document.forms[0].gotobutton.disabled = false;
     getSchools();
 }
@@ -130,25 +133,16 @@ function getOptions( sel )
     return options;
 }
 
-function setDefaultOrder()
+function initTypes()
 {
-    var type = document.forms[0].type.value;
-    if ( default_order[type] )
-    {
-        document.forms[0].order_by.value = default_order[type];
-    }
-    if ( postcodePt && type == "all" )
-    {
-        document.forms[0].order_by.value = "distance";
-    }
+    var source = document.forms[0].source.value;
+    url = schools_url + "?types&source=" + source;
+    get( url, initTypesCallback );
 }
-
-var transaction;
-var noRedraw = false;
 
 function getSchoolsCallback( response )
 {
-    markers.clearMarkers();
+    markersLayer.clearMarkers();
     removeChildren( listDiv );
     googleDiv.innerHTML = google_html;
     var xmlDoc = response.responseXML;
@@ -159,7 +153,9 @@ function getSchoolsCallback( response )
     var nSchools = schoolsXml.length;
     for ( var i = 0; i < schoolsXml.length; i++ )
     {
-        createSchoolMarker( createSchool( schoolsXml[i] ), "blue" );
+        var school = xml2obj( schoolsXml[i] );
+        schools.push( school );
+        createSchoolMarker( school, "blue" );
     }
     if ( nschools && schoolsXml.length )
     {
@@ -174,9 +170,9 @@ function getSchoolsCallback( response )
     }
     if ( postcodePt )
     {
-        createMarker( "X", "red", postcodePt );
         var zl = max_zoom;
         noRedraw = true;
+        createMarker( "X", "red", postcodePt );
         var markersOffScreen = 1;
         while ( markersOffScreen )
         {
@@ -184,9 +180,9 @@ function getSchoolsCallback( response )
             map.zoomTo( zl-- );
             map.setCenter( postcodePt );
             markersOffScreen = 0;
-            for ( var i = 0; i < markers.markers.length; i++ )
+            for ( var i = 0; i < markersLayer.markers.length; i++ )
             {
-                var marker = markers.markers[i];
+                var marker = markersLayer.markers[i];
                 if ( ! marker.onScreen() )
                 {
                     markersOffScreen++;
@@ -195,20 +191,51 @@ function getSchoolsCallback( response )
         }
         noRedraw = false;
     }
-    transaction = false;
+}
+
+var transaction;
+var current_url;
+
+function get( url, callback )
+{
+    var callbacks = {
+        success:function(o) {
+            YAHOO.log( "GOT " + current_url );
+            // YAHOO.log( o.responseText );
+            callback( o );
+        },
+        failure:function(o) { 
+            YAHOO.log( "GET " + current_url + " failed:" + o.statusText ) 
+        }
+    };
+    current_url = url;
+    if ( transaction )
+    {
+        if ( YAHOO.util.Connect.isCallInProgress( transaction ) )
+        {
+            YAHOO.log( "abort " + transaction );
+            YAHOO.util.Connect.abort( transaction );
+        }
+    }
+    YAHOO.log( "GET " + url );
+    transaction = YAHOO.util.Connect.asyncRequest( 'GET', url, callbacks );
 }
 
 function getSchools()
 {
     if ( noRedraw ) return;
     var type = document.forms[0].type.value;
+    var source = document.forms[0].source.value;
     var order_by = document.forms[0].order_by.value;
+    YAHOO.log( "order_by " + order_by );
+    var order_by_str = "(ordered by " + order_by + ")";
     var url;
     var top = "";
-    var closest = "";
     if ( order_by == "distance" )
     {
-        closest = " closest to " + document.forms[0].postcode.value + " ";
+        order_by_str = 
+            " closest to " + document.forms[0].postcode.value + " " +
+            "(ordered by " + order_by + ")"
     }
     else
     {
@@ -221,14 +248,13 @@ function getSchools()
         top +
         type +
         " schools" +
-        closest +
-        "(ordered by " +
-        order_by + 
-        ")", 4
+        " from " + source + " " +
+        order_by_str
     ); 
     var bounds = map.getExtent();
     url = schools_url + "?" +
-        "type=" + escape( type ) +
+        "source=" + escape( source ) +
+        "&type=" + escape( type ) +
         "&orderBy=" + escape( order_by ) +
         "&limit=" + escape( document.forms[0].limit.value )
     ;
@@ -239,29 +265,25 @@ function getSchools()
             "&centreY=" + escape( postcodePt.lat )
         ;
     }
-    else
-    {
-        url +=
+    url +=
         "&minX=" + escape( bounds.left ) + 
         "&maxX=" + escape( bounds.right ) + 
         "&minY=" + escape( bounds.bottom ) + 
         "&maxY=" + escape( bounds.top )
-    }
+    ;
     schools = new Array();
-    if ( transaction ) YAHOO.util.Connect.abort( transaction );
-    transaction = YAHOO.util.Connect.asyncRequest( 'GET', url, { success:getSchoolsCallback } );
+    get( url, getSchoolsCallback );
 }
 
-function createSchool( schoolXML )
+function xml2obj( xml )
 {
-    var school = new Object();
-    for ( var j = 0; j < schoolXML.attributes.length; j++ )
+    var obj = new Object();
+    for ( var j = 0; j < xml.attributes.length; j++ )
     {
-        var attr = schoolXML.attributes.item( j );
-        if ( attr.value ) school[attr.name] = attr.value;
+        var attr = xml.attributes.item( j );
+        if ( attr.value ) obj[attr.name] = attr.value;
     }
-    schools.push( school );
-    return school;
+    return obj;
 }
 
 function createMarker( letter, colour, point )
@@ -273,7 +295,7 @@ function createMarker( letter, colour, point )
         new OpenLayers.Pixel( -9, -27 )
     );
     var marker = new OpenLayers.Marker( point, icon );
-    markers.addMarker( marker );
+    markersLayer.addMarker( marker );
     return marker;
 }
 
@@ -289,15 +311,30 @@ function addPopup()
     map.addPopup( this.popup, true );
 }
 
+function deActivateSchool( school )
+{
+    changeLinksColour( school.links, "blue" )
+    changeMarkerColour( school.marker, "blue" )
+    school.marker.active = false;
+}
+
+function activateSchool( school )
+{
+    changeLinksColour( school.links, "red" )
+    changeMarkerColour( school.marker, "red" )
+    if ( active_school ) deActivateSchool( active_school );
+    school.marker.active = true;
+}
+
 function createSchoolMarker( school, colour ) 
 {
     try {
         school.letter = getLetter( school.type );
         var point = new OpenLayers.LonLat( school.lon, school.lat );
         var marker = createMarker( school.letter, colour, point );
-        // marker.events.register( "mouseover", marker, mouseOver );
-        // marker.events.register( "mouseout", marker, mouseOut );
-        marker.events.register( "click", marker, toggleMarker );
+        // marker.events.register( "mouseover", marker, function() { activateSchool( this.school ) } );
+        // marker.events.register( "mouseout", marker, function() { deActivateSchool( this.school ) } );
+        marker.events.register( "click", marker, function() { toggleSchool( this.school ) } );
         marker.school = school;
         school.marker = marker;
     }
@@ -305,26 +342,49 @@ function createSchoolMarker( school, colour )
 }
 
 
-function initTypes()
+function setOrderBy()
 {
     removeChildren( document.forms[0].order_by );
     dfes_types = new Array();
     for ( var dfes_type in type2keystage )
     {
-        addOpt( document.forms[0].order_by, type2keystage[dfes_type] + " results", "average_" + dfes_type );
+        var opt = addOpt( document.forms[0].order_by, type2keystage[dfes_type] + " results", "average_" + dfes_type );
         dfes_types.push( dfes_type );
+        YAHOO.log( "add order_by option " + opt.value );
     }
     if ( postcodePt )
     {
         var postcode = document.forms[0].postcode.value;
-        addOpt( document.forms[0].order_by, "Distance from " + postcode, "distance" );
+        var opt = addOpt( document.forms[0].order_by, "Distance from " + postcode, "distance" );
+        YAHOO.log( "add order_by option " + opt.value );
+        document.forms[0].order_by.value = "distance";
+        YAHOO.log( "set order_by = distance" );
     }
-    removeChildren( document.forms[0].type );
-    for ( var type in types )
-    {
-        addOpt( document.forms[0].type, types[type], type );
+}
+
+function initTypesCallback( response )
+{
+    try {
+        var xmlDoc = response.responseXML;
+        var typesXml = xmlDoc.documentElement.getElementsByTagName( "type" );
+        var types = new Array();
+        for ( var i = 0; i < typesXml.length; i++ )
+        {
+            var type = xml2obj( typesXml[i] );
+            types.push( type );
+        }
+        removeChildren( document.forms[0].type );
+        for ( var i = 0; i < types.length; i++ )
+        {
+            var type = types[i];
+            addOpt( document.forms[0].type, type.label, type.name );
+        }
+        addOpt( document.forms[0].type, "All", "all" );
+        document.forms[0].type.value = "all";
+        if ( document.forms[0].postcode.value ) getPostcode();
+        else getSchools();
     }
-    document.forms[0].type.value = "all";
+    catch(e) { alert( e ) }
 }
 
 function initTableHead()
@@ -368,8 +428,25 @@ function initTableHead()
     return ths;
 }
 
+function initSources()
+{
+    removeChildren( document.forms[0].source );
+    for ( var source in sources )
+        addOpt( document.forms[0].source, sources[source], source );
+    document.forms[0].source.value = "all";
+}
+
 function initMap()
 {
+    // logreader = new YAHOO.widget.LogReader();
+    var oACDS = new YAHOO.widget.DS_XHR( postcodes_url, ["\n", "\t"]); 
+    oACDS.responseType = YAHOO.widget.DS_XHR.prototype.TYPE_FLAT; 
+    oACDS.queryMatchSubset = true; 
+    var oAutoComp = new YAHOO.widget.AutoComplete(
+        "ysearchinput",
+        "ysearchcontainer", 
+        oACDS
+    );
     googleDiv = document.getElementById( "google" );
     listDiv = document.getElementById( "list" );
     google_html = googleDiv.innerHTML;
@@ -378,15 +455,14 @@ function initMap()
     var gmapLayer = new OpenLayers.Layer.Google( "GMaps" );
     map.addLayer( gmapLayer );
     map.setCenter( default_centre );
+    markersLayer = new OpenLayers.Layer.Markers( "Markers" );
+    map.addLayer( markersLayer );
+    initSources();
+    map.zoomTo( default_zoom );
+    setOrderBy();
+    initTypes();
     map.events.register( "zoomend", map, getSchools );
     map.events.register( "moveend", map, getSchools );
-    markers = new OpenLayers.Layer.Markers( "Markers" );
-    map.addLayer( markers );
-    initTypes();
-    if ( document.forms[0].postcode.value ) getPostcode();
-    setDefaultOrder();
-    map.zoomTo( default_zoom );
-    getSchools();
 }
 
 function createListTd( text, url, school, onclick, wrap )
@@ -398,18 +474,16 @@ function createListTd( text, url, school, onclick, wrap )
         a.target = school.school_id;
         if ( onclick ) a.onclick = onclick;
         a.href = url;
-        var marker = school.marker;
-        a.marker = marker;
-        if ( ! marker.links ) marker.links = new Array();
-        marker.links.push( a );
+        if ( ! school.links ) school.links = new Array();
+        school.links.push( a );
         a.style.color = "blue";
         a.appendChild( document.createTextNode( text ) );
         td.appendChild( a );
         a.onmouseover = function() {
-            activateMarker( marker );
+            activateSchool( school );
         };
         a.onmouseout = function() {
-            deActivateMarker( marker );
+            deActivateSchool( school );
         };
     }
     else
@@ -556,9 +630,9 @@ function changeMarkerColour( marker, colour )
 {
     // var url = getIconUrl( marker.school.letter, colour );
     // marker.icon.src = url;
-    // markers.redraw();
+    // markersLayer.redraw();
     createSchoolMarker( marker.school, colour );
-    markers.removeMarker( marker );
+    markersLayer.removeMarker( marker );
 }
 
 function changeLinksColour( links, color )
@@ -571,41 +645,17 @@ function changeLinksColour( links, color )
     }
 }
 
-function mouseOut()
-{
-    deActivateMarker( this );
-}
+var active_school;
 
-function mouseOver()
+function toggleSchool( school )
 {
-    activateMarker( this );
-}
-
-var active_marker;
-
-function toggleMarker()
-{
-    if ( this.active ) deActivateMarker( this );
+    if ( school.active ) deActivateSchool( school );
     else 
     {
-        if ( active_marker ) deActivateMarker( active_marker );
-        activateMarker( this );
-        active_marker = this;
+        if ( active_school ) deActivateSchool( active_school );
+        activateSchool( school );
+        active_school = school;
     }
-}
-
-function deActivateMarker( marker )
-{
-    changeLinksColour( marker.links, "blue" )
-    changeMarkerColour( marker, "blue" )
-    marker.active = false;
-}
-
-function activateMarker( marker )
-{
-    changeLinksColour( marker.links, "red" )
-    changeMarkerColour( marker, "red" )
-    marker.active = true;
 }
 
 function addOpt( sel, str, val, isSel )
@@ -613,6 +663,7 @@ function addOpt( sel, str, val, isSel )
     var opt = new Option( str, val );
     opt.selected = isSel;
     sel.options[sel.options.length] = opt;
+    return opt;
 }
 
 function getLetter( type )
