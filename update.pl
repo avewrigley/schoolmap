@@ -30,7 +30,7 @@ use Data::Dumper;
 my %opts;
 my %update;
 my @sources = qw( isi ofsted dfes );
-my @opts = qw( source=s silent pidfile! verbose all );
+my @opts = qw( update source=s silent pidfile! verbose );
 my %links;
 my $geo;
 my $dbh;
@@ -79,6 +79,20 @@ sub get_links
     ;
     $links{$url}{$re} = [ sort keys %l ];
     return @{$links{$url}{$re}};
+}
+
+sub lookup_school
+{
+    my $url_key = shift;
+    my $table = shift;
+    my $url = shift;
+    return if $opts{update};
+    my $sth = $dbh->prepare( "SELECT $url_key FROM $table WHERE $url_key = ?" );
+    $sth->execute( $url );
+    my $school = $sth->fetchrow_hashref();
+    warn "$url_key $school->{$url_key} already exists\n" if $school;
+    return $school;
+
 }
 
 sub create_school
@@ -207,6 +221,8 @@ SQL
                 {
                     SCHOOL: for my $school_url ( get_links( $type, $re{school} ) )
                     {
+                        my $school = lookup_school( "ofsted_url", "ofsted", $school_url );
+                        next SCHOOL if $school;
                         my ( $name, $postcode );
                         my ( $school_id ) = $school_url =~ $re{school};
                         my %school;
@@ -309,13 +325,11 @@ $update{dfes} = sub {
     my @generic_keys = qw( school_id dfes_url address region lea );
     my %keys = (
         post16 => [ qw( 
-            url_post16 
             pupils_post16 
             average_post16 
             average_post16pe
         ) ],
         primary => [ qw(
-            url_primary
             pupils_primary
             smi
             eng_l4
@@ -327,7 +341,6 @@ $update{dfes} = sub {
             average_primary
         ) ],
         secondary => [ qw(
-            url_secondary
             pupils_secondary
             gcse_l2
             gcse_l1
@@ -413,7 +426,7 @@ $update{dfes} = sub {
                                 }
                                 $school{school_id} = create_school( $name, $postcode, $type );
                                 $school{address} = join( ", ", @address );
-                                my @args = ( @school{@generic_keys}, $school_url, @data );
+                                my @args = ( @school{@generic_keys}, @data );
                                 $sth->execute( @args );
                             };
                             update_report( $@, $school_url, $name );
@@ -440,7 +453,15 @@ if ( $opts{pidfile} )
 open( STDERR, ">$Bin/logs/update.log" ) unless $opts{verbose};
 print STDERR "$0 ($$) at ", scalar( localtime ), "\n";
 
-if ( $opts{all} )
+if ( $opts{source} )
+{
+    $dbh = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
+    $geo = Geo::Multimap->new();
+    warn "update $opts{source}\n";
+    die "no update code for $opts{source} ($update{$opts{source}})\n" unless ref( $update{$opts{source}} ) eq 'CODE';
+    $update{$opts{source}}->();
+}
+else
 {
     my $pm = Parallel::ForkManager->new( scalar( @sources ) );
     $pm->run_on_start( sub { warn "start process: @_\n" } );
@@ -465,14 +486,6 @@ if ( $opts{all} )
     warn "Wait for children to finish ...\n";
     $pm->wait_all_children();
     warn "all done\n";
-}
-if ( $opts{source} )
-{
-    $dbh = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
-    $geo = Geo::Multimap->new();
-    warn "update $opts{source}\n";
-    die "no update code for $opts{source} ($update{$opts{source}})\n" unless ref( $update{$opts{source}} ) eq 'CODE';
-    $update{$opts{source}}->();
 }
 
 warn "$0 ($$) finished\n";
