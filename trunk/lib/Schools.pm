@@ -13,7 +13,7 @@ sub new
     $self->{dbh} = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
     my @what = ( "*" );
     $self->{args} = [];
-    if ( $self->{orderBy} && $self->{orderBy} eq 'distance' )
+    if ( $self->{order_by} && $self->{order_by} eq 'distance' )
     {
         push( 
             @what, 
@@ -49,7 +49,7 @@ EOF
     @select_where = @count_where = @where;
     if ( $self->{minX} && $self->{maxX} && $self->{minY} && $self->{maxY} )
     {
-        if ( $self->{orderBy} ne 'distance' )
+        if ( $self->{order_by} ne 'distance' )
         {
             push( 
                 @select_where,
@@ -144,15 +144,15 @@ sub schools_xml
 {
     my $self = shift;
     my $sql = "SELECT $self->{what} $self->{from} $self->{select_where}";
-    if ( $self->{orderBy} )
+    if ( $self->{order_by} )
     {
-        if ( $self->{orderBy} eq 'distance' )
+        if ( $self->{order_by} eq 'distance' )
         {
             $sql .= " ORDER BY geo_dist";
         }
         else
         {
-            $sql .= " ORDER BY $self->{orderBy} DESC";
+            $sql .= " ORDER BY $self->{order_by} DESC";
         }
     }
     $sql .= " LIMIT $self->{limit}" if $self->{limit};
