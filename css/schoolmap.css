@@ -19,3 +19,4 @@ img { border: 0px }
 #ysearchcontainer li {padding:0 5px;cursor:default;white-space:nowrap;}
 #ysearchcontainer li.yui-ac-highlight {background:#ff0;}
 #ysearchsubmit {position:relative;}
+.small { font-size: xx-small }

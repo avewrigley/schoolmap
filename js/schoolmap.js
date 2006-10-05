@@ -11,7 +11,8 @@ var postcode_url = "cgi/postcode.cgi";
 var postcodes_url = "cgi/postcodes.cgi";
 var cgi_url = "cgi/schools.cgi";
 var modperl_url = "schools";
-var schools_url = cgi_url;
+var schools_url = "schools.xml";
+var school_url = "cgi/school.cgi";
 var nearby_url = "http://www.nearby.org.uk/";
 var icon_root_url = 'http://bluweb.com/us/chouser/gmapez/iconEZ2/';
 var schools;
@@ -38,13 +39,12 @@ var explanation = {
     "ofsted report":"link to Ofsted report for this school",
     "isi report":"link to Independent Schools Inspectorate report for this school",
     "pupils_post16":"Number of students aged 16-18",
-    "average_post16":"GCE and VCE results: average point score per student",
-    "average_primary":"Key Stage 2: average point score",
+    "ave_post16":"GCE and VCE results: average point score per student",
+    "ave_primary":"Key Stage 2: average point score",
     "pupils_primary":"Total pupils eligible for Key Stage 2 assesment",
-    "average_secondary":"GCSE (and equivalent) results: average total point score per pupil",
+    "ave_secondary":"GCSE (and equivalent) results: average total point score per pupil",
     "pupils_secondary":"Number of pupils at the end of KS4"
 };
-
 
 var listDiv;
 
@@ -73,7 +73,7 @@ function getPostcode()
     var a = document.createElement( "A" );
     a.href = nearby_url + "coord.cgi?p=" + escape( postcode );
     a.target = "nearby";
-    a.appendChild( document.createTextNode( "click here for other stuff nearby " + postcode + " from " + nearby_url ) );
+    a.appendChild( document.createTextNode( "other stuff nearby " + postcode + " from " + nearby_url ) );
     childReplace( nearbyDiv, a );
     document.forms[0].gotobutton.disabled = true;
     setStatus( "finding " + postcode ); 
@@ -88,11 +88,11 @@ function createLinkTo( query_string )
     var url = url + "?" + query_string;
     var link1 = document.createElement( "A" );
     link1.href = url;
-    link1.appendChild( document.createTextNode( "link to this page: " + url ) );
+    link1.appendChild( document.createTextNode( "link to this page" ) );
     var link2 = document.createElement( "A" );
     url = schools_url + "?" + query_string;
     link2.href = url;
-    link2.appendChild( document.createTextNode( "schools data as XML: " + url ) );
+    link2.appendChild( document.createTextNode( "schools data for this page as XML" ) );
     linkToDiv = document.getElementById( "linkto" );
     removeChildren( linkToDiv );
     linkToDiv.appendChild( link1 );
@@ -157,55 +157,54 @@ function initTypes()
 
 function getSchoolsCallback( response )
 {
-    markersLayer.clearMarkers();
-    removeChildren( listDiv );
-    googleDiv.innerHTML = google_html;
-    var xmlDoc = response.responseXML;
-    var meta = xmlDoc.documentElement.getElementsByTagName( "schools" );
-    var schoolsXml = xmlDoc.documentElement.getElementsByTagName( "school" );
-    var nschools;
-    if ( meta ) nschools = meta[0].getAttribute( 'nschools' );
-    var nSchools = schoolsXml.length;
-    for ( var i = 0; i < schoolsXml.length; i++ )
-    {
-        var school = xml2obj( schoolsXml[i] );
-        schools.push( school );
-        createSchoolMarker( school, "blue" );
-    }
-    if ( nschools && schoolsXml.length )
-    {
-        listDiv.appendChild( createListTable() );
-        var b = document.createElement( "B" );
-        b.appendChild( document.createTextNode( schoolsXml.length + " / " + nschools + " schools" ) );
-        listDiv.appendChild( b );
-    }
-    else
-    {
-        setStatus( "there are no schools in on this map" ); 
-    }
-    if ( postcodePt )
-    {
-        var zl = max_zoom;
-        noRedraw = true;
-        createMarker( "X", "red", postcodePt );
-        var markersOffScreen = 1;
-        while ( markersOffScreen )
+    try {
+        markersLayer.clearMarkers();
+        removeChildren( listDiv );
+        googleDiv.innerHTML = google_html;
+        var xmlDoc = response.responseXML;
+        var nschools = xmlDoc.documentElement.getAttribute( 'nschools' );
+        var schoolsXml = xmlDoc.documentElement.getElementsByTagName( "school" );
+        for ( var i = 0; i < schoolsXml.length; i++ )
         {
-            markersOffScreen = 0;
-            map.zoomTo( zl-- );
-            map.setCenter( postcodePt );
-            markersOffScreen = 0;
-            for ( var i = 0; i < markersLayer.markers.length; i++ )
+            var school = xml2obj( schoolsXml[i] );
+            schools.push( school );
+            createSchoolMarker( school, "blue" );
+        }
+        if ( nschools && schoolsXml.length )
+        {
+            listDiv.appendChild( createListTable() );
+            var b = document.createElement( "B" );
+            b.appendChild( document.createTextNode( schoolsXml.length + " / " + nschools + " schools" ) );
+            listDiv.appendChild( b );
+        }
+        else
+        {
+            setStatus( "there are no schools in on this map" ); 
+        }
+        if ( postcodePt )
+        {
+            var zl = max_zoom;
+            noRedraw = true;
+            createMarker( "X", "red", postcodePt );
+            var markersOffScreen = 1;
+            while ( markersOffScreen )
             {
-                var marker = markersLayer.markers[i];
-                if ( ! marker.onScreen() )
+                markersOffScreen = 0;
+                map.zoomTo( zl-- );
+                map.setCenter( postcodePt );
+                markersOffScreen = 0;
+                for ( var i = 0; i < markersLayer.markers.length; i++ )
                 {
-                    markersOffScreen++;
+                    var marker = markersLayer.markers[i];
+                    if ( ! marker.onScreen() )
+                    {
+                        markersOffScreen++;
+                    }
                 }
             }
+            noRedraw = false;
         }
-        noRedraw = false;
-    }
+    } catch( e ) { alert( e ) }
 }
 
 var transaction;
@@ -281,7 +280,8 @@ function getSchools()
     {
         query_string +=
             "&centreX=" + escape( postcodePt.lon ) +
-            "&centreY=" + escape( postcodePt.lat )
+            "&centreY=" + escape( postcodePt.lat ) +
+            "&postcode=" + escape( document.forms[0].postcode.value )
         ;
     }
     else
@@ -419,37 +419,31 @@ function initTableHead()
     var ths = new Array();
     var obj = new Object();
     obj["name"] = "name";
-    obj["orderable"] = false;
     ths.push( obj );
     var obj = new Object();
     obj["name"] = "ofsted report";
-    obj["orderable"] = false;
     ths.push( obj );
     var obj = new Object();
     obj["name"] = "isi report";
-    obj["orderable"] = false;
     ths.push( obj );
     for ( var i = 0; i < dfes_types.length; i++ )
     {
         var dfes_type = dfes_types[i];
         obj = new Object();
         obj["keys"] = new Array();
-        var average = { "name":"average", "orderable":true, "dfes_type":dfes_type };
-        var pupils = { "name":"pupils", "orderable":false, "dfes_type":dfes_type };
+        var average = { "name":"ave", "dfes_type":dfes_type };
+        var pupils = { "name":"pupils", "dfes_type":dfes_type };
         obj["keys"].push( average );
         obj["keys"].push( pupils );
-        obj["orderable"] = true;
         ths.push( obj );
     }
     var obj = new Object();
     obj["name"] = "type";
-    obj["orderable"] = false;
     ths.push( obj );
     if ( postcodePt ) 
     {
         obj = new Object();
         obj["name"] = "distance";
-        obj["orderable"] = true;
         ths.push( obj );
     }
     return ths;
@@ -530,14 +524,14 @@ function initMap()
     initTypes();
 }
 
-function createListTd( text, url, school, onclick, wrap )
+function createListTd( text, url, school, wrap )
 {
     var td = document.createElement( "TD" );
     if ( url )
     {
         var a = document.createElement( "A" );
         a.target = school.school_id;
-        if ( onclick ) a.onclick = onclick;
+        a.onclick = function() { window.open( url, "_new", "status,scrollbars" ); return false; };
         a.href = url;
         if ( ! school.links ) school.links = new Array();
         school.links.push( a );
@@ -563,28 +557,41 @@ function addCell( tr, dfes_type, keyname, school )
 {
     var val = "-";
     var key = keyname + "_" + dfes_type;
+    var url;
     if ( school[key] && school[key] != 0 )
     {
         val = school[key];
-        var url = school.dfes_url;
+        url = school_url + "?source=dfes&school_id=" + school.school_id;
     }
-    var onclick = function() { window.open( url, "_new", "status,scrollbars" ); return false; };
-    tr.appendChild( createListTd( val, url, school, onclick ) );
+    tr.appendChild( createListTd( val, url, school ) );
+}
+
+function myround( num, precision )
+{
+    return Math.round( parseFloat( num ) * Math.pow( 10, precision ) );
 }
 
 function createListRow( school )
 {
-    var onclick = function() { return false };
     var tr = document.createElement("TR");
-    tr.appendChild( createListTd( school.name, "about:blank", school, onclick, true ) );
+    var url = school_url + "?school_id=" + school.school_id;
+    tr.appendChild( createListTd( school.name, url, school, true ) );
     var ofsted = "no";
-    if ( school.ofsted_url ) ofsted = "yes";
-    var onclick = function() { window.open( school.ofsted_url, "_new", "status,scrollbars" ); return false; };
-    tr.appendChild( createListTd( ofsted, school.ofsted_url, school, onclick ) );
+    url = false;
+    if ( school.ofsted_url ) 
+    {
+        ofsted = "yes";
+        url = school_url + "?source=ofsted&school_id=" + school.school_id;
+    }
+    tr.appendChild( createListTd( ofsted, url, school ) );
     var isi = "no";
-    if ( school.isi_url ) isi = "yes";
-    var onclick = function() { window.open( school.isi_url, "_new", "status,scrollbars" ); return false; };
-    tr.appendChild( createListTd( isi, school.isi_url, school, onclick ) );
+    url = false;
+    if ( school.isi_url ) 
+    {
+        isi = "yes";
+        url = school_url + "?source=isi&school_id=" + school.school_id;
+    }
+    tr.appendChild( createListTd( isi, url, school ) );
     for ( var i = 0; i < dfes_types.length; i++ )
     {
         var dfes_type = dfes_types[i];
@@ -596,7 +603,7 @@ function createListRow( school )
     tr.appendChild( createListTd( type ) );
     if ( postcodePt )
     {
-        var dist = school.distance;
+        var dist = sprintf( "%0.2f", school.distance );
         tr.appendChild( createListTd( dist + " miles" ) );
     }
     return tr;
@@ -616,7 +623,7 @@ function getSymbol( label )
     return span;
 }
 
-function createHeadCell( tr, name, orderable, dfes_type )
+function createHeadCell( tr, name, dfes_type )
 {
     var key = name;
     if ( dfes_type ) key = name + "_" + dfes_type;
@@ -636,7 +643,6 @@ function createHeadCell( tr, name, orderable, dfes_type )
         return false;
     };
     a.appendChild( document.createTextNode( name ) );
-    if ( ! orderable ) return;
 }
 
 function createListTable()
@@ -673,12 +679,12 @@ function createListTable()
             var keys = ths[i].keys;
             for ( var j = 0; j < keys.length; j++ )
             {
-                createHeadCell( tr, keys[j].name, keys[j].orderable, keys[j].dfes_type );
+                createHeadCell( tr, keys[j].name, keys[j].dfes_type );
             }
         }
         else
         {
-            createHeadCell( tr, ths[i].name, ths[i].orderable );
+            createHeadCell( tr, ths[i].name );
         }
     }
     for ( var i = 0; i < schools.length; i++ )

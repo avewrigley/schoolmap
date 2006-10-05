@@ -7,7 +7,7 @@ use Apache;
 use Apache::Request;
 use Apache::Constants qw/:common/;
 require Schools;
-my $logfile = '/var/www/www.schoolmap.org.uk/logs/schools.mod_perl.log';
+my $logfile = '/var/www/www.schoolmap.org.uk/logs/schools.log';
 sub handler
 {
     my $r = Apache::Request->new( shift );
