@@ -5,20 +5,21 @@
     <meta name="description" content="A Google Maps mashup site to display UK schools, and links to Ofsted reports and DFES performance results." />
     <meta name="keywords" content="schools, ofsted, school league tables, dfes, local schools" />
     <script src="http://maps.google.com/maps?file=api&amp;v=2&amp;key=ABQIAAAAzvdwQCWLlw5TXpo7sNhCSRTpDCCGWHns9m2oc9sQQ_LCUHXVlhS7v4YbLZCNgHXnaepLqcd-J0BBDw" type="text/javascript"></script>
-    <script src="js/schoolmap.js" type="text/javascript"></script>
-    <script src="js/yui/build/yahoo/yahoo.js" type="text/javascript"></script>
-    <script src="js/yui/build/connection/connection.js" type="text/javascript"></script>
+    <script src="/js/sprintf.js" type="text/javascript"></script>
+    <script src="/js/schoolmap.js" type="text/javascript"></script>
+    <script src="/js/yui/build/yahoo/yahoo.js" type="text/javascript"></script>
+    <script src="/js/yui/build/connection/connection.js" type="text/javascript"></script>
     <!-- Required CSS --> 
-    <link type="text/css" rel="stylesheet" href="js/yui/build/logger/assets/logger.css"> 
+    <link type="text/css" rel="stylesheet" href="/js/yui/build/logger/assets/logger.css" />
     <!-- Dependencies --> 
-    <script type="text/javascript" src="js/yui/build/dragdrop/dragdrop.js"></script> 
-    <script type="text/javascript" src="js/yui/build/dom/dom.js"></script> 
-    <script type="text/javascript" src="js/yui/build/event/event.js"></script> 
+    <script type="text/javascript" src="/js/yui/build/dragdrop/dragdrop.js"></script> 
+    <script type="text/javascript" src="/js/yui/build/dom/dom.js"></script> 
+    <script type="text/javascript" src="/js/yui/build/event/event.js"></script> 
     <!-- Source file --> 
-    <script type="text/javascript" src="js/yui/build/logger/logger.js"></script> 
-    <script type="text/javascript" src="js/yui/build/autocomplete/autocomplete.js"></script> 
+    <script type="text/javascript" src="/js/yui/build/logger/logger.js"></script> 
+    <script type="text/javascript" src="/js/yui/build/autocomplete/autocomplete.js"></script> 
     <script src="http://www.openlayers.org/api/2/OpenLayers.js" type="text/javascript"></script>
-    <link rel="stylesheet" href="css/schoolmap.css" type="text/css" media="screen" />
+    <link rel="stylesheet" href="/css/schoolmap.css" type="text/css" media="screen" />
 </head>
 <body onload="initMap()">
 <div id="google">
@@ -67,16 +68,16 @@
 <table cellpadding="0" cellspacing="0" style="width:100%"><tr>
 <td>
             <!-- AutoComplete begins -->
-            <span id="ysearchmod">
-                <span><b>postcode:</b></span>
-                <span id="ysearchautocomplete">
-                    <input id="ysearchinput" size="10" name="postcode" value="" >
+            <div id="ysearchmod">
+                <div id="ysearchautocomplete">
+                    <span><b>postcode:</b></span>
+                    <input id="ysearchinput" size="10" name="postcode" value=""  />
+                    <input type="submit" name="gotobutton" value="goto" onclick="getPostcode(); return false" />
+                    <input type="submit" name="gotoclear" value="clear" onclick="clearPostcode(); return false" />
                     <div id="ysearchcontainer"></div>
-                </span>
-            </span>
+                </div>
+            </div>
             <!-- AutoComplete ends -->
-            <input type="submit" name="gotobutton" value="goto" onclick="getPostcode(); return false" />
-            <input type="submit" name="gotoclear" value="clear" onclick="clearPostcode(); return false" />
 </td>
 <td align="right">
     <b>source:</b><select name="source" onchange="initTypes()"><option /></select>
@@ -111,11 +112,32 @@
     </tr>
 </table>
 <hr />
-<p>Please send comments, suggestions or bugs to <a href="mailto:ave.wrigley@ave.wrigley.name">ave.wrigley@ave.wrigley.name</a></p>
-<p><a href="http://code.google.com/p/schoolmap/">Google Code Homepage</a></p>
-<p><a href="http://validator.w3.org/check?uri=referer"><img src="http://www.w3.org/Icons/valid-xhtml10" alt="Valid XHTML 1.0 Strict" height="31" width="88" /></a></p>
-<p><a href="http://jigsaw.w3.org/css-validator/"> <img style="border:0;width:88px;height:31px" src="http://jigsaw.w3.org/css-validator/images/vcss" alt="Valid CSS!" /></a></p>
-<div id="nearby" />
-<div id="linkto" />
+<table width="100%">
+    <tr>
+        <td style="width:25%" align="left"> <div id="linkto"></div> </td>
+        <td style="width:25%" align="center"> <div id="nearby"></div> </td>
+        <td style="width:25%" align="center"><a href="http://www.google.co.uk/search?as_lq=www.schoolmap.org.uk&amp;filter=0">pages that link to this site</a></td>
+        <td style="width:25%" align="right">
+            <b>Share this site</b>:
+            <a href="http://del.icio.us/post?url=http%3A%2F%2Fwww.schoolmap.org.uk&amp;title=UK+School+Map" ><img src="/images/delicious.png" alt='Add to del.icio.us' /></a>
+            <a href="http://digg.com/submit?phase=2&amp;url=http%3A%2F%2Fwww.schoolmap.org.uk"><img src="/images/digg.png" alt='Add to Digg' /></a>
+            <a href="http://technorati.com/faves?add=http%3A%2F%2Fwww.schoolmap.org.uk"><img src="/images/tecnorati.png" alt='Add to Technorati' /></a>
+            <a href="http://www.furl.net/storeIt.jsp?t=UK+School+Map&amp;u=http%3A%2F%2Fwww.schoolmap.org.uk" ><img src="/images/furl.gif" alt='Add to furl' /></a>
+            <a href="http://myweb.yahoo.com/myresults/bookmarklet?t=UK+School+Map&amp;u=http%3A%2F%2Fwww.schoolmap.org.uk&amp;ei=UTF" ><img src="/images/yahoo.png" alt='Add to Yahoo' /></a>
+
+        </td>
+    </tr>
+</table>
+<hr />
+<table width="100%">
+    <tr>
+        <td style="width:33%" align="left">Please send comments, suggestions or bugs to <a href="mailto:ave.wrigley@ave.wrigley.name">ave.wrigley@ave.wrigley.name</a></td>
+        <td style="width:33%" align="center"><a href="http://code.google.com/p/schoolmap/">Google Code Homepage</a></td>
+        <td style="width:33%" align="right">
+            <a href="http://validator.w3.org/check?uri=referer"><img src="http://www.w3.org/Icons/valid-xhtml10" alt="Valid XHTML 1.0 Strict" height="31" width="88" /></a>
+            <a href="http://jigsaw.w3.org/css-validator/validator?uri=http://www.schoolmap.org.uk"><img style="border:0;width:88px;height:31px" src="http://jigsaw.w3.org/css-validator/images/vcss" alt="Valid CSS!" /></a>
+        </td>
+    </tr>
+</table>
 </body>
 </html>

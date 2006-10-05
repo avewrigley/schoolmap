@@ -4,6 +4,7 @@ use strict;
 use warnings;
 
 use HTML::Entities qw( encode_entities );
+use Template;
 
 sub new
 {
@@ -11,13 +12,13 @@ sub new
     my $self = bless { @_ }, $class;
     require DBI;
     $self->{dbh} = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
-    my @what = ( "*" );
+    my @what = ( "*,school.*" );
     $self->{args} = [];
-    if ( $self->{order_by} && $self->{order_by} eq 'distance' )
+    if ( $self->{centreX} && $self->{centreY} )
     {
         push( 
             @what, 
-            "(((acos(sin((?*pi()/180)) * sin((school.lat*pi()/180)) + cos((?*pi()/180)) * cos((school.lat*pi()/180)) * cos(((? - school.lon)*pi()/180))))*180/pi())*60*1.1515) as geo_dist",
+            "(((acos(sin((?*pi()/180)) * sin((school.lat*pi()/180)) + cos((?*pi()/180)) * cos((school.lat*pi()/180)) * cos(((? - school.lon)*pi()/180))))*180/pi())*60*1.1515) as distance",
             # "acos( ( sin( ? ) * sin( school.lat ) ) + ( cos( ? ) * cos( school.lat ) * cos( school.lon - ? ) ) ) AS geo_dist"
         );
         $self->{args} = [
@@ -129,17 +130,6 @@ sub types_xml
     return $xml;
 }
 
-sub add_distance
-{
-    my $self = shift;
-    my $school = shift;
-    return unless $self->{centreX} && $self->{centreY};
-    $school->{distance} = sprintf( "%.2f", $self->{geo}->distance(
-        'mile',
-        $school->{lon}, $school->{lat} => $self->{centreX}, $self->{centreY},
-    ) );
-}
-
 sub schools_xml
 {
     my $self = shift;
@@ -148,7 +138,7 @@ sub schools_xml
     {
         if ( $self->{order_by} eq 'distance' )
         {
-            $sql .= " ORDER BY geo_dist";
+            $sql .= " ORDER BY distance";
         }
         else
         {
@@ -164,32 +154,22 @@ sub schools_xml
     my $nschools = $self->count();
     $nschools = $nrows if $nrows > $nschools;
     warn "nschools: $nschools\n";
-    my $xml = "<data><schools nschools=\"$nschools\">";
+    my @schools;
     while ( my $school = $sth->fetchrow_hashref )
     {
-        $self->add_distance( $school );
-        $xml .= $self->school_xml( $school ) . "\n";
+        push( @schools, $school );
     }
-    $xml .= "</schools></data>";
-    warn $xml;
+    my $tt = Template->new( { INCLUDE_PATH => "../templates" } );
+    my $xml;
+    $tt->process(
+        "school.xml",
+        {
+            schools => \@schools,
+            nschools => $nschools
+        },
+        \$xml
+    ) || die $tt->error;
     return $xml;
-}
-
-sub school_xml
-{
-    my $self = shift;
-    my $school = shift;
-    return
-        "<school" . join( "",
-        map( 
-            "\n\t$_=" .
-            '"' .
-            encode_entities( $school->{$_}, '<>&"' ) .
-            '"', 
-            grep { defined $school->{$_} && length $school->{$_} } keys %$school 
-        ) ) .
-        "/>"
-    ;
 }
 
 1;
