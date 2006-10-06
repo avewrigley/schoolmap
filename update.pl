@@ -9,6 +9,7 @@
 
 use strict;
 use warnings;
+use Carp;
 use Parallel::ForkManager;
 use File::Slurp;
 require URI;
@@ -115,6 +116,11 @@ SQL
 {
     my %result;
 
+    sub init_report
+    {
+        %result = ();
+    }
+
     sub set_modtime
     {
         my $url = shift;
@@ -159,7 +165,6 @@ SQL
         my $url = shift;
         my $name = shift;
         my $description = $name ? "$name ($url)" : $url;
-        $result{$url} = $error;
         if ( $error )
         {
             warn "FAILED: $description: $error\n";
@@ -169,17 +174,19 @@ SQL
             warn "SUCCESS: $description\n";
             set_modtime( $url );
         }
+        $result{$url} = $error;
     }
 
     sub print_report
     {
-        warn "SUCCESSFUL: ", scalar( grep { ! defined $result{$_} } keys %result ), "\n";
-        warn "FAILED: ", scalar( grep { defined $result{$_} } keys %result ), "\n";
+        warn "SUCCESSFUL: ", scalar( grep { ! $result{$_} } keys %result ), "\n";
+        warn "FAILED: ", scalar( grep { $result{$_} } keys %result ), "\n";
     }
 }
 
 $update{ofsted} = sub {
     warn "update ofsted ...\n";
+    init_report();
     my $base = 'http://www.ofsted.gov.uk/reports/';
     my @fields = qw( ofsted_school_id school_id ofsted_url lea_id region_id );
 
@@ -189,7 +196,6 @@ $update{ofsted} = sub {
     my $sth = $dbh->prepare( <<SQL );
 REPLACE INTO ofsted ( $fields ) VALUES ( $placeholders )
 SQL
-
     my %re = (
         region => qr/fuseaction=leaByRegion&id=(\d+)/,
         lea => qr/fuseaction=lea&id=(\d+)/,
@@ -214,7 +220,7 @@ SQL
                     {
                         my ( $html ) = get_html( $school_url );
                         warn "can't get $school_url\n" and next SCHOOL unless $html;
-                        my ( $report_url ) = get_links( $html, $school_url, qr{/reports/[^/]+/\d+.(html?|pdf)$}, 1 );
+                        my ( $report_url ) = get_links( $html, $school_url, qr{/reports/.*\.(html?|pdf)$}, 1 );
                         unless ( $report_url )
                         {
                             update_report( "can't find report", $school_url );
@@ -248,7 +254,7 @@ SQL
                             die "no school_id" unless $school_id;
                             $sth->execute( @school{@fields} );
                         };
-                        update_report( $@, $report_url, $name );
+                        update_report( $@, $school_url, $name );
                     }
                     my @pages = get_links( get_html( $type ), $re{page} );
                     my $next;
@@ -271,6 +277,7 @@ SQL
 
 $update{isi} = sub {
     warn "update isi ...\n";
+    init_report();
     my $base = 'http://www.isinspect.org.uk/isindex/alpha.htm';
     my $re = qr{http://www.isinspect.org.uk/report/\d+.htm};
     for my $school_url ( get_links( get_html( $base ), $re ) )
@@ -344,6 +351,7 @@ $update{isi} = sub {
 
 $update{dfes} = sub {
     warn "update dfes ...\n";
+    init_report();
     my @generic_keys = qw( dfes_url region lea );
     my %keys = (
         post16 => [ qw( 

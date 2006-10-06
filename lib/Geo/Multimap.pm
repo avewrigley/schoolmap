@@ -73,6 +73,17 @@ sub db_find
     return;
 }
 
+sub all
+{
+    my $self = shift;
+    my $limit = shift;
+    my $sql = "SELECT * FROM postcode";
+    $sql .= " LIMIT $limit" if defined $limit;
+    my $sth = $self->{dbh}->prepare( $sql );
+    $sth->execute();
+    return $sth->fetchall_arrayref( {} );
+}
+
 sub find
 {
     my $self = shift;
