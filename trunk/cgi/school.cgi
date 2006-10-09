@@ -19,7 +19,7 @@ print "Content-Type: text/html\n\n";
 my %formdata = CGI::Lite->new->parse_form_data();
 my $school_id = $formdata{school_id} or die "no school_id\n";
 my $dbh = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
-my ( %url, %description );
+my ( %url, %description, %target );
 my $sql = "SELECT * FROM school WHERE school.school_id = '$school_id'";
 my $sth = $dbh->prepare( $sql );
 $sth->execute();
@@ -39,17 +39,18 @@ while ( my $source = $sth->fetchrow_hashref )
     warn "URL = $url\n";
     $url{$source->{name}} = $url;
     $description{$source->{name}} = $source->{description};
+    $target{$source->{name}} = "school";
     $sth->finish();
 }
 $sth->finish();
 $dbh->disconnect();
-my @sources = keys %url;
-my ( $iframe_source, $links );
+my @sources = sort keys %url;
+my ( $iframe_source, $tabs );
 if ( @sources )
 {
     my $current_source = $formdata{source} || $sources[0];
     $iframe_source = $url{$current_source};
-    $links = '';
+    $tabs = '';
     for my $source ( @sources )
     {
         my $class = '';
@@ -57,10 +58,10 @@ if ( @sources )
         {
             $class = 'class="current"';
         }
-        $links .= <<EOF;
+        $tabs .= <<EOF;
 <li><a 
     $class 
-    target="school" 
+    target="$target{$source}" 
     href="$url{$source}"
     onclick="
         try {
@@ -76,6 +77,17 @@ EOF
     }
 }
 
+my $name = $school->{name}; 
+$name =~ s/\s+/_/g;
+$name =~ s/[^A-Za-z0-9_]//g;
+my $links = 
+    join " | ",
+    map qq{<a href="$_->{url}">$_->{description}</a>},
+    (
+        { url => "/wiki/index.php/$name", description => "Schoolmap Wiki" },
+        { url => "http://en.wikipedia.org/wiki/$name", description => "Wikipedia entry" },
+    )
+;
 print <<EOF;
 <html>
     <head>
@@ -88,8 +100,12 @@ print <<EOF;
         <h2>$school->{name}</h2>
         <p>$school->{address}</p>
         <p>$school->{postcode}</p>
-        <div id="navcontainer"><ul id="navlist">$links</ul></div>
+        $links
+        <div id="navcontainer"><ul id="navlist">$tabs</ul></div>
         <iframe style="border: 0" name="school" width="100%" height="100%" src="$iframe_source"></iframe>
+        <script type="text/javascript">
+            this.frame[0].top = this.frame[0];
+        </script> 
     </body>
 </html>
 EOF
