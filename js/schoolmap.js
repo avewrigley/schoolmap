@@ -158,6 +158,8 @@ function initTypes()
 function getSchoolsCallback( response )
 {
     try {
+        var body = document.getElementsByTagName( "body" );
+        body[0].style.cursor = "auto";
         markersLayer.clearMarkers();
         removeChildren( listDiv );
         googleDiv.innerHTML = google_html;
@@ -235,6 +237,20 @@ function get( url, callback )
     transaction = YAHOO.util.Connect.asyncRequest( 'GET', url, callbacks );
 }
 
+var curtags = [ "body", "a", "input" ];
+function setCursor( state )
+{
+    for ( var i = 0; i < curtags.length; i++ )
+    {
+        var tag = curtags[i];
+        var es = document.getElementsByTagName( tag );
+        for ( var j = 0; j < es.length; j++ )
+        {
+            es[j].style.cursor = state;
+        }
+    }
+}
+
 function getSchools()
 {
     if ( noRedraw ) return;
@@ -284,6 +300,7 @@ function getSchools()
     schools = new Array();
     var url = schools_url + "?" + query_string;
     createLinkTo( query_string );
+    setCursor( "wait" );
     get( url, getSchoolsCallback );
 }
 
