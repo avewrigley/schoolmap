@@ -13,52 +13,35 @@ use warnings;
 use CGI::Lite;
 require DBI;
 
-open( STDERR, ">>../logs/school.log" );
-warn "$$ at ", scalar( localtime ), "\n";
-print "Content-Type: text/html\n\n";
-my %formdata = CGI::Lite->new->parse_form_data();
-my $school_id = $formdata{school_id} or die "no school_id\n";
-my $dbh = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
-my ( %url, %description, %target );
-my $sql = "SELECT * FROM school WHERE school.school_id = '$school_id'";
-my $sth = $dbh->prepare( $sql );
-$sth->execute();
-my $school = $sth->fetchrow_hashref;
-$sth->finish();
-$sql = "SELECT * FROM source";
-$sth = $dbh->prepare( $sql );
-$sth->execute();
-while ( my $source = $sth->fetchrow_hashref )
+my $dbh;
+
 {
-    my $sql = "SELECT $source->{name}.$source->{name}_url FROM $source->{name} WHERE $source->{name}.school_id = '$school_id'";
-    warn "$sql\n";
-    my $sth = $dbh->prepare( $sql );
-    $sth->execute();
-    my ( $url ) = $sth->fetchrow;
-    next unless $url;
-    warn "URL = $url\n";
-    $url{$source->{name}} = $url;
-    $description{$source->{name}} = $source->{description};
-    $target{$source->{name}} = "school";
-    $sth->finish();
-}
-$sth->finish();
-$dbh->disconnect();
-my @sources = sort keys %url;
-my ( $iframe_source, $tabs );
-if ( @sources )
-{
-    my $current_source = $formdata{source} || $sources[0];
-    $iframe_source = $url{$current_source};
-    $tabs = '';
-    for my $source ( @sources )
+    my ( %url, %description, %target );
+
+    sub add_source
     {
-        my $class = '';
-        if ( $current_source eq $source )
-        {
-            $class = 'class="current"';
-        }
-        $tabs .= <<EOF;
+        my $source = shift;
+        my $sql = shift;
+        warn "$sql\n";
+        my $sth = $dbh->prepare( $sql );
+        $sth->execute();
+        my ( $url ) = $sth->fetchrow;
+        return unless $url;
+        warn "URL = $url\n";
+        $url{$source->{name}} = $url;
+        $description{$source->{name}} = $source->{description};
+        $target{$source->{name}} = "school";
+        $sth->finish();
+    }
+
+    sub get_sources { return keys %url; }
+    sub get_url { return $url{$_[0]}; }
+
+    sub get_tab
+    {
+        my $source = shift;
+        my $class = shift;
+        return <<EOF;
 <li><a 
     $class 
     target="$target{$source}" 
@@ -77,6 +60,78 @@ EOF
     }
 }
 
+open( STDERR, ">>../logs/school.log" );
+warn "$$ at ", scalar( localtime ), "\n";
+print "Content-Type: text/html\n\n";
+my %formdata = CGI::Lite->new->parse_form_data();
+warn map "$_ = $formdata{$_}\n", keys %formdata;
+my $school_id = $formdata{school_id} or die "no school_id\n";
+$dbh = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
+my $sql = "SELECT * FROM school WHERE school.school_id = '$school_id'";
+my $sth = $dbh->prepare( $sql );
+$sth->execute();
+my $school = $sth->fetchrow_hashref;
+$sth->finish();
+$sql = "SELECT * FROM source";
+$sth = $dbh->prepare( $sql );
+$sth->execute();
+my %types = (
+    post16 => "GCE and VCE",
+    secondary => "GCSE",
+    primary => "Key stage 2",
+);
+
+while ( my $source = $sth->fetchrow_hashref )
+{
+    if ( $source->{name} eq 'dfes' )
+    {
+        for my $type ( keys %types )
+        {
+            my $type_source = {
+                name => "dfes_$type",
+                description => "$source->{description} - $types{$type}",
+            };
+            add_source( 
+                $type_source, 
+                "SELECT $source->{name}.${type}_url FROM $source->{name} WHERE $source->{name}.school_id = '$school_id'" 
+            );
+        }
+    }
+    else
+    {
+        add_source( $source, "SELECT $source->{name}.$source->{name}_url FROM $source->{name} WHERE $source->{name}.school_id = '$school_id'" );
+    }
+}
+
+$sth->finish();
+$dbh->disconnect();
+my @sources = get_sources();
+my ( $iframe_source, $tabs );
+if ( @sources )
+{
+    my $current_source = $sources[0];
+    if ( $formdata{source} )
+    {
+        $current_source = $formdata{source};
+        if ( $formdata{type} )
+        {
+            $current_source = "$formdata{source}_$formdata{type}";
+        }
+    }
+    warn "current source: $current_source\n";
+    $iframe_source = get_url( $current_source );
+    $tabs = '';
+    for my $source ( @sources )
+    {
+        my $class = '';
+        if ( $current_source eq $source )
+        {
+            $class = 'class="current"';
+        }
+        $tabs .= get_tab( $source, $class );
+    }
+}
+
 my $name = $school->{name}; 
 $name =~ s/\s+/_/g;
 $name =~ s/[^A-Za-z0-9_]//g;
@@ -88,7 +143,7 @@ my $links =
         { url => "http://en.wikipedia.org/wiki/$name", description => "Wikipedia entry" },
     )
 ;
-print <<EOF;
+my $html = <<EOF;
 <html>
     <head>
         <title>$school->{name}</title>
@@ -109,6 +164,8 @@ print <<EOF;
     </body>
 </html>
 EOF
+
+print $html;
 
 #------------------------------------------------------------------------------
 #
