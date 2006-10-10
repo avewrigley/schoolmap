@@ -86,7 +86,6 @@ sub create_school
 {
     my $name = shift;
     my $postcode = shift;
-    my $type = shift;
     my $address = shift;
     die "no name" unless $name;
     die "no postcode" unless $postcode;
@@ -103,14 +102,25 @@ SQL
         return $school_id if defined $school_id;
     }
     my $replace_sth = $dbh->prepare( <<SQL );
-REPLACE INTO school ( name, postcode, lat, lon, type, address ) VALUES ( ?,?,?,?,?,? )
+REPLACE INTO school ( name, postcode, lat, lon, address ) VALUES ( ?,?,?,?,? )
 SQL
-    $replace_sth->execute( $name, $postcode, $lat, $lon, $type, $address );
+    $replace_sth->execute( $name, $postcode, $lat, $lon, $address );
     $replace_sth->finish();
     $select_sth->execute( $name, $postcode );
     ( $school_id ) = $select_sth->fetchrow;
     $select_sth->finish();
     return $school_id;
+}
+
+sub add_school_type
+{
+    my $school_id = shift;
+    my $type = shift;
+    my $insert_sth = $dbh->prepare( <<SQL );
+INSERT IGNORE INTO school_type ( school_id, type ) VALUES ( ?,? )
+SQL
+    $insert_sth->execute( $school_id, $type );
+    $insert_sth->finish();
 }
 
 {
@@ -250,7 +260,8 @@ SQL
                                 }
                             }
                             die "no address" unless $address;
-                            $school{school_id} = create_school( $name, $postcode, $type_id, $address );
+                            $school{school_id} = create_school( $name, $postcode, $address );
+                            add_school_type( $school{school_id}, $type_id );
                             die "no school_id" unless $school_id;
                             $sth->execute( @school{@fields} );
                         };
@@ -337,7 +348,8 @@ $update{isi} = sub {
                 }
 
             }
-            $school{school_id} = create_school( $name, $postcode, "independent", $address );
+            $school{school_id} = create_school( $name, $postcode, $address );
+            add_school_type( $school{school_id}, "independent" );
             my $keys = join( ",", keys %school );
             my $placeholders = join( ",", map "?", keys %school );
             my $sql = " REPLACE INTO isi ( $keys ) VALUES ( $placeholders )";
@@ -352,19 +364,22 @@ $update{isi} = sub {
 $update{dfes} = sub {
     warn "update dfes ...\n";
     init_report();
-    my @generic_keys = qw( dfes_url region lea );
+    my @generic_keys = qw( region lea );
     my %keys = (
-        post16 => [ qw( 
+        post16 => [ qw(
             pupils_post16 
             average_post16 
+            post16_url
         ) ],
         primary => [ qw(
             pupils_primary
             average_primary
+            primary_url
         ) ],
         secondary => [ qw(
             pupils_secondary
             average_secondary
+            secondary_url
         ) ]
     );
     my %indexes = (
@@ -448,7 +463,6 @@ SQL
                                 my ( $school_html ) = get_html( $school_url );
                                 my $address;
                                 die "get $school_url failed\n" unless $school_html;
-                                $school{dfes_url} = $school_url;
                                 ( $address ) = $school_html =~ m{
                                     <h3>[^<]+</h3>
                                     (.*?)
@@ -471,7 +485,8 @@ SQL
                                     }
                                 }
                                 $address = join( ", ", @address );
-                                $school{school_id} = create_school( $name, $postcode, $type, $address );
+                                $school{school_id} = create_school( $name, $postcode, $address );
+                                add_school_type( $school{school_id}, $type );
                                 $select_sth->execute( $school{school_id} );
                                 if ( $select_sth->fetchrow )
                                 {
@@ -479,6 +494,7 @@ SQL
                                     $update_sth->execute( 
                                         @school{@generic_keys}, 
                                         @data, 
+                                        $school_url,
                                         $school{school_id} 
                                     );
                                 }
@@ -488,7 +504,8 @@ SQL
                                     $insert_sth->execute( 
                                         $school{school_id},
                                         @school{@generic_keys}, 
-                                        @data
+                                        @data,
+                                        $school_url,
                                     );
                                 }
                             };

@@ -17,24 +17,19 @@ var nearby_url = "http://www.nearby.org.uk/";
 var icon_root_url = 'http://bluweb.com/us/chouser/gmapez/iconEZ2/';
 var schools;
 var noRedraw = false;
+var active_school;
 var params = new Object();
+var keystages = new Array();
+var keystage2str = new Object();
+var source2str = new Object();
+var type2str = new Object();
 
-var dfes_types = new Array();
+var transaction;
+var current_url;
 
-var dfes_type2str = {
-    post16:"GCE and VCE",
-    secondary:"GCSE",
-    primary:"Key stage 2"
-};
-
-var source2str = {
-    ofsted:"Ofsted",
-    isi:"Independent Schools Inspectorate",
-    dfes:"DfES",
-    all:"All"
-};
-
-var order_by2str = {
+var symbols = new Object();
+var curtags = [ "body", "a", "input" ];
+var title = {
     "name":"Name of school",
     "ofsted report":"link to Ofsted report for this school",
     "isi report":"link to Independent Schools Inspectorate report for this school",
@@ -56,7 +51,6 @@ function clearPostcode()
     document.forms[0].postcode.value = "";
     postcodePt = false;
     childReplace( nearbyDiv, document.createTextNode( '' ) );
-    setOrderBy();
     getSchools();
 }
 
@@ -111,8 +105,10 @@ function getPostcodeCallback( response )
     postcodePt = new OpenLayers.LonLat( x, y );
     createMarker( "X", "red", postcodePt );
     map.setCenter( postcodePt );
-    setOrderBy();
     document.forms[0].gotobutton.disabled = false;
+    var postcode = document.forms[0].postcode.value;
+    var opt = addOpt( document.forms[0].order_by, "Distance from " + postcode, "distance" );
+    document.forms[0].order_by.value = "distance";
     getSchools();
 }
 
@@ -148,11 +144,95 @@ function getOptions( sel )
     return options;
 }
 
+function initSources()
+{
+    var source = document.forms[0].source.value;
+    url = schools_url + "?sources";
+    get( url, initSourcesCallback );
+}
+
+function initSourcesCallback( response )
+{
+    try {
+        var xmlDoc = response.responseXML;
+        var sourcesXml = xmlDoc.documentElement.getElementsByTagName( "source" );
+        var sources = new Array();
+        for ( var i = 0; i < sourcesXml.length; i++ )
+        {
+            var source = xml2obj( sourcesXml[i] );
+            sources.push( source );
+        }
+        removeChildren( document.forms[0].source );
+        for ( var i = 0; i < sources.length; i++ )
+        {
+            var source = sources[i];
+            addOpt( document.forms[0].source, source.description, source.name );
+            source2str[source.name] = source.description;
+        }
+        addOpt( document.forms[0].source, "All", "all" );
+        document.forms[0].source.value = "all";
+        if ( params.source ) document.forms[0].source.value = params.source;
+        initKeystages();
+    }
+    catch(e) { alert( e ) }
+}
+
+function initKeystages()
+{
+    var source = document.forms[0].source.value;
+    url = schools_url + "?keystages";
+    get( url, initKeystagesCallback );
+}
+
+function initKeystagesCallback( response )
+{
+    try {
+        var xmlDoc = response.responseXML;
+        var keystagesXml = xmlDoc.documentElement.getElementsByTagName( "keystage" );
+        for ( var i = 0; i < keystagesXml.length; i++ )
+        {
+            var keystage = xml2obj( keystagesXml[i] );
+            YAHOO.log( "keystage: " + keystage.name );
+            keystages.push( keystage );
+            keystage2str[keystage.name] = keystage.description;
+        }
+        initTypes();
+    }
+    catch(e) { alert( e ) }
+}
+
 function initTypes()
 {
     var source = document.forms[0].source.value;
     url = schools_url + "?types&source=" + source;
     get( url, initTypesCallback );
+}
+
+function initTypesCallback( response )
+{
+    try {
+        var xmlDoc = response.responseXML;
+        var typesXml = xmlDoc.documentElement.getElementsByTagName( "type" );
+        var types = new Array();
+        for ( var i = 0; i < typesXml.length; i++ )
+        {
+            var type = xml2obj( typesXml[i] );
+            types.push( type );
+        }
+        removeChildren( document.forms[0].type );
+        for ( var i = 0; i < types.length; i++ )
+        {
+            var type = types[i];
+            addOpt( document.forms[0].type, type.label, type.name );
+            type2str[type.name] = type.label;
+        }
+        addOpt( document.forms[0].type, "All", "all" );
+        document.forms[0].type.value = "all";
+        if ( params.type ) document.forms[0].type.value = params.type;
+        if ( document.forms[0].postcode.value ) getPostcode();
+        else getSchools();
+    }
+    catch(e) { alert( e ) }
 }
 
 function getSchoolsCallback( response )
@@ -209,9 +289,6 @@ function getSchoolsCallback( response )
     } catch( e ) { alert( e ) }
 }
 
-var transaction;
-var current_url;
-
 function get( url, callback )
 {
     var callbacks = {
@@ -237,7 +314,6 @@ function get( url, callback )
     transaction = YAHOO.util.Connect.asyncRequest( 'GET', url, callbacks );
 }
 
-var curtags = [ "body", "a", "input" ];
 function setCursor( state )
 {
     for ( var i = 0; i < curtags.length; i++ )
@@ -254,6 +330,7 @@ function setCursor( state )
 function getSchools()
 {
     if ( noRedraw ) return;
+    setOrderBy();
     var type = document.forms[0].type.value;
     var source = document.forms[0].source.value;
     var order_by = document.forms[0].order_by.value;
@@ -267,7 +344,7 @@ function getSchools()
     }
     else
     {
-        status = status + "(ordered by " + order_by2str[order_by] + ")";
+        status = status + "(ordered by " + keystage2str[order_by] + ")";
     }
     setStatus( status );
     var bounds = map.getExtent();
@@ -373,54 +450,26 @@ function createSchoolMarker( school, colour )
 
 function setOrderBy()
 {
-    removeChildren( document.forms[0].order_by );
-    dfes_types = new Array();
     try {
-        for ( var dfes_type in dfes_type2str )
+        var curr = document.forms[0].order_by.value || params.order_by;
+        removeChildren( document.forms[0].order_by );
+        for ( var i = 0; i < keystages.length; i++ )
         {
-            var opt = addOpt( document.forms[0].order_by, dfes_type2str[dfes_type] + " results", "average_" + dfes_type );
-            dfes_types.push( dfes_type );
-            YAHOO.log( "add order_by option " + opt.value );
+            var keystage = keystages[i];
+            var opt = addOpt( 
+                document.forms[0].order_by, 
+                keystage.description + " results", 
+                keystage.name 
+            );
         }
         if ( postcodePt )
         {
             var postcode = document.forms[0].postcode.value;
             var opt = addOpt( document.forms[0].order_by, "Distance from " + postcode, "distance" );
-            YAHOO.log( "add order_by option " + opt.value );
-            document.forms[0].order_by.value = "distance";
-            YAHOO.log( "set order_by = distance" );
         }
-        if ( params.order_by ) document.forms[0].order_by.value = params.order_by;
+        if ( curr ) document.forms[0].order_by.value = curr;
     }
     catch(e) { YAHOO.log( e ) }
-}
-
-var type2str = new Object();
-
-function initTypesCallback( response )
-{
-    try {
-        var xmlDoc = response.responseXML;
-        var typesXml = xmlDoc.documentElement.getElementsByTagName( "type" );
-        var types = new Array();
-        for ( var i = 0; i < typesXml.length; i++ )
-        {
-            var type = xml2obj( typesXml[i] );
-            types.push( type );
-        }
-        removeChildren( document.forms[0].type );
-        for ( var i = 0; i < types.length; i++ )
-        {
-            var type = types[i];
-            addOpt( document.forms[0].type, type.label, type.name );
-            type2str[type.name] = type.label;
-        }
-        addOpt( document.forms[0].type, "All", "all" );
-        document.forms[0].type.value = "all";
-        if ( document.forms[0].postcode.value ) getPostcode();
-        else getSchools();
-    }
-    catch(e) { alert( e ) }
 }
 
 function initTableHead()
@@ -430,13 +479,13 @@ function initTableHead()
     ths.push( { name:"name" } );
     ths.push( { name:"ofsted report" } );
     ths.push( { name:"isi report" } );
-    for ( var i = 0; i < dfes_types.length; i++ )
+    for ( var i = 0; i < keystages.length; i++ )
     {
-        var dfes_type = dfes_types[i];
+        var keystage = keystages[i];
         obj = new Object();
         obj["keys"] = new Array();
-        var average = { "name":"average", "dfes_type":dfes_type };
-        var pupils = { "name":"pupils", "dfes_type":dfes_type };
+        var average = { "name":"average", "keystage":keystage.name };
+        var pupils = { "name":"pupils", "keystage":keystage.name };
         obj["keys"].push( average );
         obj["keys"].push( pupils );
         ths.push( obj );
@@ -451,18 +500,6 @@ function initTableHead()
         ths.push( obj );
     }
     return ths;
-}
-
-function initSources()
-{
-    try {
-        removeChildren( document.forms[0].source );
-        for ( var source in source2str )
-            addOpt( document.forms[0].source, source2str[source], source );
-        document.forms[0].source.value = "all";
-        if ( params.source ) document.forms[0].source.value = params.source;
-    }
-    catch( e ) { YAHOO.log( e ) }
 }
 
 function getQueryVariables() 
@@ -500,7 +537,6 @@ function initMap()
     map.setCenter( default_centre );
     markersLayer = new OpenLayers.Layer.Markers( "Markers" );
     map.addLayer( markersLayer );
-    initSources();
     if ( 
         params.minX &&
         params.minY &&
@@ -520,15 +556,14 @@ function initMap()
         var centre = new OpenLayers.LonLat( params.centreX, params.centreY );
         map.setCenter( centre );
     }
-    setOrderBy();
     map.events.register( "zoomend", map, getSchools );
     map.events.register( "moveend", map, getSchools );
     if ( params.postcode ) document.forms[0].postcode.value = params.postcode;
     if ( params.limit ) document.forms[0].limit.value = params.limit;
-    initTypes();
+    initSources();
 }
 
-function createListTd( text, url, school, wrap )
+function createListTd( text, url, school )
 {
     var td = document.createElement( "TD" );
     if ( url )
@@ -553,20 +588,24 @@ function createListTd( text, url, school, wrap )
     {
         td.appendChild( document.createTextNode( text ) );
     }
-    td.noWrap = ! wrap;
     td.style.verticalAlign = "top";
     return td;
 }
 
-function addCell( tr, dfes_type, keyname, school )
+function addCell( tr, keystage, keyname, school )
 {
     var val = "-";
-    var key = keyname + "_" + dfes_type;
+    var key = keyname + "_" + keystage;
     var url;
     if ( school[key] && school[key] != 0 )
     {
         val = school[key];
-        url = school_url + "?source=dfes&school_id=" + school.school_id;
+        url = 
+            school_url + 
+            "?source=dfes&school_id=" + 
+            school.school_id + 
+            "&type=" + keystage
+        ;
     }
     tr.appendChild( createListTd( val, url, school ) );
 }
@@ -580,8 +619,8 @@ function createListRow( no, school )
 {
     var tr = document.createElement("TR");
     var url = school_url + "?school_id=" + school.school_id;
-    tr.appendChild( createListTd( no+1, url, school, true ) );
-    tr.appendChild( createListTd( school.name, url, school, true ) );
+    tr.appendChild( createListTd( no+1, url, school ) );
+    tr.appendChild( createListTd( school.name, url, school ) );
     var ofsted = "no";
     url = false;
     if ( school.ofsted_url ) 
@@ -598,11 +637,11 @@ function createListRow( no, school )
         url = school_url + "?source=isi&school_id=" + school.school_id;
     }
     tr.appendChild( createListTd( isi, url, school ) );
-    for ( var i = 0; i < dfes_types.length; i++ )
+    for ( var i = 0; i < keystages.length; i++ )
     {
-        var dfes_type = dfes_types[i];
-        addCell( tr, dfes_type, "average", school );
-        addCell( tr, dfes_type, "pupils", school );
+        var keystage = keystages[i];
+        addCell( tr, keystage.name, "average", school );
+        addCell( tr, keystage.name, "pupils", school );
     }
     var type = "-";
     if ( school.type ) type = school.type;
@@ -615,7 +654,6 @@ function createListRow( no, school )
     return tr;
 }
 
-var symbols = new Object();
 symbols = {
     "up":"\u2191",
     "down":"\u2193"
@@ -629,10 +667,10 @@ function getSymbol( label )
     return span;
 }
 
-function createHeadCell( tr, name, dfes_type )
+function createHeadCell( tr, name, keystage )
 {
     var key = name;
-    if ( dfes_type ) key = name + "_" + dfes_type;
+    if ( keystage ) key = name + "_" + keystage;
     var th = document.createElement( "TH" );
     th.style.verticalAlign = "top";
     tr.appendChild( th );
@@ -640,14 +678,11 @@ function createHeadCell( tr, name, dfes_type )
     th.appendChild( a );
     th.appendChild( document.createElement( "BR" ) );
     a.name = key;
-    a.title = order_by2str[key];
+    a.title = title[key];
     a.style.color = "black";
     a.style.textDecoration = "none";
     a.href = "";
-    a.onclick = function() { 
-        alert( order_by2str[this.name] );
-        return false;
-    };
+    a.onclick = function() { return false; };
     a.appendChild( document.createTextNode( name ) );
 }
 
@@ -667,7 +702,7 @@ function createListTable()
             var th = document.createElement( "TH" );
             tr.appendChild( th );
             th.colSpan = 2;
-            th.appendChild( document.createTextNode( dfes_type2str[key.dfes_type] ) );
+            th.appendChild( document.createTextNode( keystage2str[key.keystage] ) );
         }
         else
         {
@@ -685,7 +720,7 @@ function createListTable()
             var keys = ths[i].keys;
             for ( var j = 0; j < keys.length; j++ )
             {
-                createHeadCell( tr, keys[j].name, keys[j].dfes_type );
+                createHeadCell( tr, keys[j].name, keys[j].keystage );
             }
         }
         else
@@ -724,8 +759,6 @@ function changeLinksColour( links, color )
         link.style.color = color;
     }
 }
-
-var active_school;
 
 function toggleSchool( school )
 {

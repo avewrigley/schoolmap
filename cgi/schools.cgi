@@ -21,9 +21,17 @@ warn map "$_ = $formdata{$_}\n", keys %formdata if %formdata;
 my $ofsted = Schools->new( %formdata );
 my $xml;
 print "Content-Type: text/xml\n\n";
-if ( exists $formdata{types} )
+if ( exists $formdata{sources} )
+{
+    $xml = $ofsted->sources_xml();
+}
+elsif ( exists $formdata{types} )
 {
     $xml = $ofsted->types_xml();
+}
+elsif ( exists $formdata{keystages} )
+{
+    $xml = $ofsted->keystages_xml();
 }
 else
 {

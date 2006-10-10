@@ -7,6 +7,7 @@ use warnings;
 
 use vars qw( $VERSION );
 
+use Carp;
 use DBI;
 require HTML::TreeBuilder;
 use LWP::Simple;
@@ -16,7 +17,7 @@ sub new
     my $class = shift;
     my $self = bless {}, $class;
     $self->{dbh} = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap' )
-        or die "Cannot connect: " . $DBI::errstr
+        or croak "Cannot connect: $DBI::errstr"
     ;
     $self->{ssth} = $self->{dbh}->prepare( "SELECT * FROM postcode WHERE code = ?" );
     $self->{isth} = $self->{dbh}->prepare( "INSERT INTO postcode (code, lat, lon) VALUES ( ?, ?, ? )" );
@@ -54,9 +55,10 @@ my $multimap_url = "http://www.multimap.com/map/browse.cgi?client=public&search_
 sub coords
 {
     my $self = shift;
-    my %output = $self->find( @_ );
+    my $postcode = shift;
+    my %output = $self->find( $postcode );
     my ( $lat, $lon ) = @output{qw(lat lon)};
-    die "no lat / lon" unless defined $lat && defined $lon;
+    croak "no lat / lon for $postcode" unless defined $lat && defined $lon;
     return ( $lat, $lon );
 }
 

@@ -3,6 +3,7 @@ package Schools;
 use strict;
 use warnings;
 
+use Carp;
 use HTML::Entities qw( encode_entities );
 use Template;
 
@@ -34,17 +35,18 @@ sub new
         $self->{from} = "FROM school, $self->{source}";
     }
     $self->{from} = <<EOF;
-FROM school 
+FROM school,school_type
     LEFT JOIN ofsted ON ofsted.school_id = school.school_id 
     LEFT JOIN dfes ON dfes.school_id = school.school_id
     LEFT JOIN isi ON isi.school_id = school.school_id
 EOF
     $self->{what} = join( ",", @what );
     my $type = $self->{type};
+    push( @where, "school_type.school_id = school.school_id" );
     if ( $type && $type ne 'all' )
     {
         warn "type: $type\n";
-        push( @where, "school.type = '$type'" );
+        push( @where, "school_type.type = '$type'" );
     }
     my ( @select_where, @count_where );
     @select_where = @count_where = @where;
@@ -106,10 +108,14 @@ my %label = (
 sub types_xml
 {
     my $self = shift;
-    my $sql = "SELECT DISTINCT type from school";
+    my $sql = "SELECT DISTINCT type from school_type";
     if ( $self->{source} && $self->{source} ne 'all' )
     {
-        $sql = "SELECT DISTINCT type from school,$self->{source} WHERE $self->{source}.school_id = school.school_id";
+        $sql = <<EOF;
+SELECT DISTINCT type 
+    FROM school_type,$self->{source} 
+    WHERE $self->{source}.school_id = school_type.school_id
+EOF
     }
     my $sth = $self->{dbh}->prepare( $sql );
     $sth->execute();
@@ -130,6 +136,40 @@ sub types_xml
     return $xml;
 }
 
+sub sources_xml
+{
+    my $self = shift;
+    my $sql = "SELECT * from source";
+    my $sth = $self->{dbh}->prepare( $sql );
+    $sth->execute();
+    my $sources = $sth->fetchall_arrayref( {} );
+    $sth->finish();
+    my $tt = Template->new( { INCLUDE_PATH => "../templates" } );
+    my $xml;
+    $tt->process( "source.xml", { sources => $sources }, \$xml ) 
+        || croak $tt->error
+    ;
+    warn $xml;
+    return $xml;
+}
+
+sub keystages_xml
+{
+    my $self = shift;
+    my $sql = "SELECT * from keystage";
+    my $sth = $self->{dbh}->prepare( $sql );
+    $sth->execute();
+    my $keystages = $sth->fetchall_arrayref( {} );
+    $sth->finish();
+    my $tt = Template->new( { INCLUDE_PATH => "../templates" } );
+    my $xml;
+    $tt->process( "keystage.xml", { keystages => $keystages }, \$xml ) 
+        || croak $tt->error
+    ;
+    warn $xml;
+    return $xml;
+}
+
 sub schools_xml
 {
     my $self = shift;
@@ -142,7 +182,7 @@ sub schools_xml
         }
         else
         {
-            $sql .= " ORDER BY $self->{order_by} DESC";
+            $sql .= " ORDER BY average_$self->{order_by} DESC";
         }
     }
     $sql .= " LIMIT $self->{limit}" if $self->{limit};
@@ -155,8 +195,12 @@ sub schools_xml
     $nschools = $nrows if $nrows > $nschools;
     warn "nschools: $nschools\n";
     my @schools;
+    my $types_sth = $self->{dbh}->prepare( "SELECT type FROM school_type WHERE school_id = ?" );
     while ( my $school = $sth->fetchrow_hashref )
     {
+        $types_sth->execute( $school->{school_id} );
+        $school->{type} = join " / ", map $_->[0], @{$types_sth->fetchall_arrayref()};
+        warn "type for $school->{school_id} = $school->{type}\n";
         push( @schools, $school );
     }
     my $tt = Template->new( { INCLUDE_PATH => "../templates" } );
@@ -168,7 +212,7 @@ sub schools_xml
             nschools => $nschools
         },
         \$xml
-    ) || die $tt->error;
+    ) || croak $tt->error;
     return $xml;
 }
 
