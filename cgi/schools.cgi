@@ -25,6 +25,10 @@ if ( exists $formdata{sources} )
 {
     $xml = $ofsted->sources_xml();
 }
+elsif ( exists $formdata{years} )
+{
+    $xml = $ofsted->years_xml();
+}
 elsif ( exists $formdata{types} )
 {
     $xml = $ofsted->types_xml();

@@ -22,7 +22,10 @@ if ( $form{postcode} )
 {
     my $geo = Geo::Multimap->new();
     my %loc = $geo->find( $form{postcode} );
-    print "<coords ", map( "$_=\"$loc{$_}\" ", keys %loc ), "/>";
+    if ( %loc )
+    {
+        print "<coords ", map( "$_=\"$loc{$_}\" ", keys %loc ), "/>";
+    }
 }
 print "</data>";
 

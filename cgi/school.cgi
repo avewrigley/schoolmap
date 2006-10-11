@@ -89,11 +89,11 @@ while ( my $source = $sth->fetchrow_hashref )
         {
             my $type_source = {
                 name => "dfes_$type",
-                description => "$source->{description} - $types{$type}",
+                description => "$source->{description} - $types{$type} ($formdata{year})",
             };
             add_source( 
                 $type_source, 
-                "SELECT $source->{name}.${type}_url FROM $source->{name} WHERE $source->{name}.school_id = '$school_id'" 
+                "SELECT $source->{name}.${type}_url FROM $source->{name} WHERE $source->{name}.school_id = '$school_id' AND year = '$formdata{year}'" 
             );
         }
     }

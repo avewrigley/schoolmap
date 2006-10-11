@@ -1,0 +1,11 @@
+<[% tag | html %]s>
+    [%- FOREACH obj IN objs %]
+    <[% tag | html %]
+        [%- FOREACH key IN obj.keys() %]
+            [%- IF obj.$key.length %]
+                [% key | html %]="[% obj.$key | html %]"
+            [%- END %]
+        [%- END %]
+    />
+    [%- END %]
+</[% tag | html %]s>

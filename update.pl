@@ -31,7 +31,7 @@ use Data::Dumper;
 my %opts;
 my %update;
 my @sources = qw( isi ofsted dfes );
-my @opts = qw( type=s force source=s silent pidfile! verbose );
+my @opts = qw( flush year=s type=s force source=s silent pidfile! verbose );
 my $geo;
 my $dbh;
 
@@ -71,6 +71,7 @@ sub get_links
     my @hrefs = map { $_->{href} } grep { $_->{href} } @links;
     my @fhrefs = grep /$re/, @hrefs;
     my @afhrefs = map { URI->new_abs( $_, $url ) } @fhrefs;
+    warn "no links match $re on $url\n" unless @afhrefs;
     return @afhrefs;
 }
 
@@ -371,6 +372,11 @@ $update{dfes} = sub {
             average_post16 
             post16_url
         ) ],
+        ks3 => [ qw(
+            pupils_ks3 
+            average_ks3 
+            ks3_url
+        ) ],
         primary => [ qw(
             pupils_primary
             average_primary
@@ -385,19 +391,27 @@ $update{dfes} = sub {
     my %indexes = (
         post16 => [0,2],
         primary => [0,15],
+        ks3 => [0,11],
         secondary => [0,10],
+    );
+    my %types = (
+        post16 => "post16",
+        primary => "primary",
+        ks3 => "secondary",
+        secondary => "secondary",
     );
     my $base = 'http://www.dfes.gov.uk/performancetables/';
     my %re = (
         regions => qr{/performancetables/.*/(?:regions|lscs).shtml},
         region => qr{/performancetables/.*/(?:region|lsc)(\d+).shtml},
-        lea => qr{/performancetables/.*\?Mode=Z&No=(\d+)},
+        lea => qr{/performancetables/.*\?Mode=Z&No(?:Lea)?=(\d+)},
     );
-    my $year = '05';
+    my $year = $1 if $opts{year} =~ /(\d\d)$/;
     my %type_link = (
         primary => "http://www.dfes.gov.uk/performancetables/primary_$year.shtml",
         secondary => "http://www.dfes.gov.uk/performancetables/schools_$year.shtml",
         post16 => "http://www.dfes.gov.uk/performancetables/16to18_$year.shtml",
+        ks3 => "http://www.dfes.gov.uk/performancetables/ks3_$year.shtml",
     );
     my @types = keys %keys;
     if ( $opts{type} )
@@ -410,18 +424,18 @@ $update{dfes} = sub {
         my $type_link = $type_link{$type};
         my @keys = ( @generic_keys, @{$keys{$type}} );
         my $select_sth = $dbh->prepare( <<SQL );
-SELECT school_id FROM dfes WHERE school_id = ?
+SELECT school_id FROM dfes WHERE school_id = ? AND year = ?
 SQL
         my $update_sql = 
             "UPDATE dfes SET " . 
             join( ",", map( "$_ = ?", @keys ) ) .
-            " WHERE school_id = ?"
+            " WHERE school_id = ? AND year = ?"
         ;
         my $update_sth = $dbh->prepare( $update_sql );
         my $insert_sql = 
             "INSERT INTO dfes (" . 
-            join( ",", 'school_id', @keys ) . ") " .
-            "VALUES (" . join( ",", map "?", 'school_id', @keys ) . ")"
+            join( ",", 'school_id', 'year', @keys ) . ") " .
+            "VALUES (" . join( ",", map "?", 'school_id', 'year', @keys ) . ")"
         ;
         my $insert_sth = $dbh->prepare( $insert_sql );
         my $tcp = HTML::TableContentParser->new();
@@ -449,10 +463,12 @@ SQL
                             next ROW unless my $name_cell = shift @cells;
                             my ( $url, $name, $postcode );
                             next ROW unless ( $url, $name ) = $name_cell =~ /href=\"([^"]+)"[^>]+title=\"([^"]+)"/;
+                            warn "name: $name\n";
                             my $school_url = URI->new_abs( $url, $lea_link );
                             $school_url =~ s/\&amp;/&/g;
                             my @indexes = @{$indexes{$type}};
                             my @data = @cells[@indexes];
+                            warn "data: @data\n";
                             for ( @data )
                             {
                                 next ROW unless defined $_ && /^[\d.]+\%?$/;
@@ -486,23 +502,25 @@ SQL
                                 }
                                 $address = join( ", ", @address );
                                 $school{school_id} = create_school( $name, $postcode, $address );
-                                add_school_type( $school{school_id}, $type );
-                                $select_sth->execute( $school{school_id} );
+                                add_school_type( $school{school_id}, $types{$type} );
+                                $select_sth->execute( $school{school_id}, $opts{year} );
                                 if ( $select_sth->fetchrow )
                                 {
-                                    warn "$school{school_id} already exists\n";
+                                    warn "$school{school_id},$opts{year} already exists\n";
                                     $update_sth->execute( 
                                         @school{@generic_keys}, 
                                         @data, 
                                         $school_url,
-                                        $school{school_id} 
+                                        $school{school_id},
+                                        $opts{year},
                                     );
                                 }
                                 else
                                 {
-                                    warn "$school{school_id} is new\n";
+                                    warn "$school{school_id},$opts{year} is new\n";
                                     $insert_sth->execute( 
                                         $school{school_id},
+                                        $opts{year},
                                         @school{@generic_keys}, 
                                         @data,
                                         $school_url,
@@ -523,11 +541,25 @@ SQL
 # Main
 
 $opts{pidfile} = 1;
+$opts{year} = 2005;
 GetOptions( \%opts, @opts ) or pod2usage( verbose => 0 );
+die "year $opts{year} is not valid\n" unless $opts{year} =~ /^\w{4}$/;
 my $pp;
 if ( $opts{pidfile} )
 {
     $pp = Proc::Pidfile->new( silent => $opts{silent} );
+}
+
+if ( $opts{flush} )
+{
+    $dbh = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
+    for my $table ( qw( dfes ofsted isi school school_type url ) )
+    {
+        warn "flush $table\n";
+        $dbh->do( "DELETE FROM $table" );
+    }
+    $dbh->disconnect();
+    exit;
 }
 
 if ( $opts{source} )
@@ -540,6 +572,7 @@ if ( $opts{source} )
     warn "update $opts{source}\n";
     die "no update code for $opts{source} ($update{$opts{source}})\n" unless ref( $update{$opts{source}} ) eq 'CODE';
     $update{$opts{source}}->();
+    $dbh->disconnect();
 }
 else
 {
@@ -564,6 +597,7 @@ else
         $dbh = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
         $geo = Geo::Multimap->new();
         $update{$source}->();
+        $dbh->disconnect();
         $pm->finish;
     }
     warn "Wait for children to finish ...\n";

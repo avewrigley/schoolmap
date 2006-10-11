@@ -28,19 +28,7 @@ var transaction;
 var current_url;
 
 var symbols = new Object();
-var curtags = [ "body", "a", "input" ];
-var title = {
-    "name":"Name of school",
-    "ofsted report":"link to Ofsted report for this school",
-    "isi report":"link to Independent Schools Inspectorate report for this school",
-    "pupils_post16":"Number of students aged 16-18",
-    "average_post16":"GCE and VCE results: average point score per student",
-    "average_primary":"Key Stage 2: average point score",
-    "pupils_primary":"Total pupils eligible for Key Stage 2 assesment",
-    "average_secondary":"GCSE (and equivalent) results: average total point score per pupil",
-    "pupils_secondary":"Number of pupils at the end of KS4"
-};
-
+var curtags = [ "body", "a", "input", "select", "div" ];
 var listDiv;
 
 var letters = new Object();
@@ -96,8 +84,15 @@ function createLinkTo( query_string )
 
 function getPostcodeCallback( response )
 {
+    document.forms[0].gotobutton.disabled = false;
     var xmlDoc = response.responseXML;
     var coords = xmlDoc.documentElement.getElementsByTagName( "coords" );
+    var postcode = document.forms[0].postcode.value;
+    if ( ! coords || ! coords[0] || ! coords[0].getAttribute( "lon" ) )
+    {
+        alert( "can't find postcode " + postcode );
+        return;
+    }
     var x = coords[0].getAttribute( "lon" );
     var y = coords[0].getAttribute( "lat" );
     var code = coords[0].getAttribute( "code" );
@@ -105,7 +100,6 @@ function getPostcodeCallback( response )
     postcodePt = new OpenLayers.LonLat( x, y );
     createMarker( "X", "red", postcodePt );
     map.setCenter( postcodePt );
-    document.forms[0].gotobutton.disabled = false;
     var postcode = document.forms[0].postcode.value;
     var opt = addOpt( document.forms[0].order_by, "Distance from " + postcode, "distance" );
     document.forms[0].order_by.value = "distance";
@@ -172,6 +166,30 @@ function initSourcesCallback( response )
         addOpt( document.forms[0].source, "All", "all" );
         document.forms[0].source.value = "all";
         if ( params.source ) document.forms[0].source.value = params.source;
+        initYears();
+    }
+    catch(e) { alert( e ) }
+}
+
+function initYears()
+{
+    url = schools_url + "?years";
+    get( url, initYearsCallback );
+}
+
+function initYearsCallback( response )
+{
+    try {
+        var xmlDoc = response.responseXML;
+        var yearsXml = xmlDoc.documentElement.getElementsByTagName( "year" );
+        removeChildren( document.forms[0].year );
+        for ( var i = 0; i < yearsXml.length; i++ )
+        {
+            var year = xml2obj( yearsXml[i] );
+            YAHOO.log( "year: " + year.name );
+            addOpt( document.forms[0].year, year.year, year.year );
+        }
+        if ( params.year ) document.forms[0].year.value = params.year;
         initKeystages();
     }
     catch(e) { alert( e ) }
@@ -179,7 +197,6 @@ function initSourcesCallback( response )
 
 function initKeystages()
 {
-    var source = document.forms[0].source.value;
     url = schools_url + "?keystages";
     get( url, initKeystagesCallback );
 }
@@ -295,9 +312,11 @@ function get( url, callback )
         success:function(o) {
             YAHOO.log( "GOT " + current_url );
             // YAHOO.log( o.responseText );
+            setCursor( "default" );
             callback( o );
         },
         failure:function(o) { 
+            setCursor( "default" );
             YAHOO.log( "GET " + current_url + " failed:" + o.statusText ) 
         }
     };
@@ -311,6 +330,7 @@ function get( url, callback )
         }
     }
     YAHOO.log( "GET " + url );
+    setCursor( "wait" );
     transaction = YAHOO.util.Connect.asyncRequest( 'GET', url, callbacks );
 }
 
@@ -346,10 +366,13 @@ function getSchools()
     {
         status = status + "(ordered by " + keystage2str[order_by] + ")";
     }
+    var year = document.forms[0].year.value;
+    status = status + " for " + year;
     setStatus( status );
     var bounds = map.getExtent();
     var query_string = 
         "source=" + escape( source ) +
+        "&year=" + escape( year ) +
         "&type=" + escape( type ) +
         "&order_by=" + escape( order_by ) +
         "&limit=" + escape( document.forms[0].limit.value ) +
@@ -377,7 +400,6 @@ function getSchools()
     schools = new Array();
     var url = schools_url + "?" + query_string;
     createLinkTo( query_string );
-    setCursor( "wait" );
     get( url, getSchoolsCallback );
 }
 
@@ -472,34 +494,22 @@ function setOrderBy()
     catch(e) { YAHOO.log( e ) }
 }
 
-function initTableHead()
+function initTableHead( tr )
 {
     var ths = new Array();
-    ths.push( { name:"no" } );
-    ths.push( { name:"name" } );
-    ths.push( { name:"ofsted report" } );
-    ths.push( { name:"isi report" } );
-    for ( var i = 0; i < keystages.length; i++ )
-    {
-        var keystage = keystages[i];
-        obj = new Object();
-        obj["keys"] = new Array();
-        var average = { "name":"average", "keystage":keystage.name };
-        var pupils = { "name":"pupils", "keystage":keystage.name };
-        obj["keys"].push( average );
-        obj["keys"].push( pupils );
-        ths.push( obj );
-    }
-    var obj = new Object();
-    obj["name"] = "type";
-    ths.push( obj );
+    createHeadCell( tr, "no" );
+    createHeadCell( tr, "name", "Name of school" );
+    createHeadCell( tr, "ofsted report", "link to Ofsted report" );
+    createHeadCell( tr, "isi report", "link to Independent Schools Inspectorate report" );
+    for ( var i = 0; i < keystages.length; i++ ) 
+        createHeadCell( tr, keystages[i].description, "average score (no. pupils)" );
+    ;
+    createHeadCell( tr, "type", "Type of school" );
     if ( postcodePt ) 
     {
-        obj = new Object();
-        obj["name"] = "distance";
-        ths.push( obj );
+        var postcode = document.forms[0].postcode.value;
+        createHeadCell( tr, "distance", "Distance from " + postcode );
     }
-    return ths;
 }
 
 function getQueryVariables() 
@@ -592,24 +602,6 @@ function createListTd( text, url, school )
     return td;
 }
 
-function addCell( tr, keystage, keyname, school )
-{
-    var val = "-";
-    var key = keyname + "_" + keystage;
-    var url;
-    if ( school[key] && school[key] != 0 )
-    {
-        val = school[key];
-        url = 
-            school_url + 
-            "?source=dfes&school_id=" + 
-            school.school_id + 
-            "&type=" + keystage
-        ;
-    }
-    tr.appendChild( createListTd( val, url, school ) );
-}
-
 function myround( num, precision )
 {
     return Math.round( parseFloat( num ) * Math.pow( 10, precision ) );
@@ -640,8 +632,24 @@ function createListRow( no, school )
     for ( var i = 0; i < keystages.length; i++ )
     {
         var keystage = keystages[i];
-        addCell( tr, keystage.name, "average", school );
-        addCell( tr, keystage.name, "pupils", school );
+        var val = "-";
+        var ave = "average_" + keystage.name;
+        var url;
+        if ( school[ave] && school[ave] != 0 )
+        {
+            val = school[ave] + " (" + school["pupils_"+keystage.name] + ")";
+            var year = document.forms[0].year.value;
+            url = 
+                school_url + 
+                "?source=dfes&school_id=" + 
+                school.school_id + 
+                "&type=" + keystage.name +
+                "&year=" + year
+            ;
+        }
+        var td = createListTd( val, url, school );
+        td.noWrap = true;
+        tr.appendChild( td );
     }
     var type = "-";
     if ( school.type ) type = school.type;
@@ -667,18 +675,16 @@ function getSymbol( label )
     return span;
 }
 
-function createHeadCell( tr, name, keystage )
+function createHeadCell( tr, name, title )
 {
-    var key = name;
-    if ( keystage ) key = name + "_" + keystage;
     var th = document.createElement( "TH" );
     th.style.verticalAlign = "top";
     tr.appendChild( th );
     var a = document.createElement( "A" );
     th.appendChild( a );
     th.appendChild( document.createElement( "BR" ) );
-    a.name = key;
-    a.title = title[key];
+    a.name = name;
+    a.title = title || name;
     a.style.color = "black";
     a.style.textDecoration = "none";
     a.href = "";
@@ -693,41 +699,8 @@ function createListTable()
     table.appendChild( tbody );
     var tr = document.createElement( "TR" );
     tbody.appendChild( tr );
-    var ths = initTableHead();
-    for ( var i = 0; i < ths.length; i++ )
-    {
-        if ( ths[i].keys )
-        {
-            var key = ths[i].keys[0];
-            var th = document.createElement( "TH" );
-            tr.appendChild( th );
-            th.colSpan = 2;
-            th.appendChild( document.createTextNode( keystage2str[key.keystage] ) );
-        }
-        else
-        {
-            var th = document.createElement( "TH" );
-            tr.appendChild( th );
-            th.appendChild( document.createTextNode( '' ) );
-        }
-    }
-    tr = document.createElement( "TR" );
+    initTableHead( tr );
     tbody.appendChild( tr );
-    for ( var i = 0; i < ths.length; i++ )
-    {
-        if ( ths[i].keys )
-        {
-            var keys = ths[i].keys;
-            for ( var j = 0; j < keys.length; j++ )
-            {
-                createHeadCell( tr, keys[j].name, keys[j].keystage );
-            }
-        }
-        else
-        {
-            createHeadCell( tr, ths[i].name );
-        }
-    }
     for ( var i = 0; i < schools.length; i++ )
     {
         var tr = createListRow( i, schools[i] );
