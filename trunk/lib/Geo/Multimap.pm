@@ -26,9 +26,7 @@ sub new
 
 sub get_text_nodes
 {
-    my $url = shift;
-    my $html = get( $url );
-    unless ( $html ) { warn "get $url failed"; return (); }
+    my $html = shift;
     my $tree = HTML::TreeBuilder->new;
     $tree->parse( $html );
     my $node = $tree->elementify();
@@ -70,8 +68,10 @@ sub db_find
     my $output = $self->{ssth}->fetchrow_hashref;
     if ( $output )
     {
+        warn "found coords $output->{lat},$output->{lon} in db for $postcode\n";
         return $output;
     }
+    warn "no entry in db for $postcode\n";
     return;
 }
 
@@ -94,9 +94,11 @@ sub find
     $postcode =~ s/\s*//g;
     my $output = $self->db_find( $postcode );
     return %$output if $output;
-    my $mmu = "$multimap_url$postcode";
+    my $url = "$multimap_url$postcode";
     my ( $lat, $lon );
-    for ( get_text_nodes( $mmu, _tag => 'dd' ) )
+    my $html = get( $url );
+    warn "failed to get $url\n" and return unless $html;
+    for ( get_text_nodes( $html, _tag => 'dd' ) )
     {
         if ( /\d{1,2}:\d{1,2}:\d{1,2}[NS] \((-?[0-9.]+)\)/ )
         {
@@ -108,7 +110,12 @@ sub find
         }
         last if $lat && $lon;
     }
-    return unless $lat && $lon;
+    unless ( $lat && $lon )
+    {
+        warn "can't get coords for $postcode from $url\n";
+        return;
+    }
+    warn "found coords $lat,$lon for $postcode from $url\n";
     $self->{isth}->execute( $postcode, $lat, $lon );
     return ( code => $postcode, lat => $lat, lon => $lon );
 }

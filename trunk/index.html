@@ -67,36 +67,40 @@
 <form action="/" onsubmit="getSchools(); return false">
 <table cellpadding="0" cellspacing="0" style="width:100%"><tr>
 <td>
-            <!-- AutoComplete begins -->
-            <div id="ysearchmod">
-                <div id="ysearchautocomplete">
-                    <span><b>postcode:</b></span>
-                    <input id="ysearchinput" size="10" name="postcode" value=""  />
-                    <input type="submit" name="gotobutton" value="goto" onclick="getPostcode(); return false" />
-                    <input type="submit" name="gotoclear" value="clear" onclick="clearPostcode(); return false" />
-                    <div id="ysearchcontainer"></div>
-                </div>
-            </div>
-            <!-- AutoComplete ends -->
+    <!-- AutoComplete begins -->
+    <div id="ysearchmod">
+        <div class="controls" id="ysearchautocomplete">
+            <span><b>postcode:</b></span>
+            <input id="ysearchinput" size="10" name="postcode" value=""  />
+            <input type="submit" name="gotobutton" value="goto" onclick="getPostcode(); return false" />
+            <input type="submit" name="gotoclear" value="clear" onclick="clearPostcode(); return false" />
+            <div id="ysearchcontainer"></div>
+        </div>
+    </div>
+    <!-- AutoComplete ends -->
 </td>
 <td align="right">
+    <div class="controls" />
     <b>source:</b><select name="source" onchange="initTypes()"><option /></select>
+    <b>year:</b>
+    <select name="year" onchange="getSchools()"><option /></select>
     <b>type:</b> <select name="type" onchange="getSchools()"><option /></select>
-<b>no. schools:</b>
-<select name="limit" onchange="getSchools()">
-    <option value="1">1</option>
-    <option value="5">5</option>
-    <option value="10">10</option>
-    <option value="15">15</option>
-    <option selected="selected" value="20">20</option>
-    <option value="25">25</option>
-    <option value="30">30</option>
-    <option value="35">35</option>
-    <option value="40">40</option>
-    <option value="45">45</option>
-    <option value="50">50</option>
-</select>
-<b>order by:</b> <select name="order_by" onchange="getSchools()"><option /></select>
+    <b>no. schools:</b>
+    <select name="limit" onchange="getSchools()">
+        <option value="1">1</option>
+        <option value="5">5</option>
+        <option value="10">10</option>
+        <option value="15">15</option>
+        <option selected="selected" value="20">20</option>
+        <option value="25">25</option>
+        <option value="30">30</option>
+        <option value="35">35</option>
+        <option value="40">40</option>
+        <option value="45">45</option>
+        <option value="50">50</option>
+    </select>
+    <b>order by:</b> <select name="order_by" onchange="getSchools()"><option /></select>
+    </div>
 </td>
 </tr></table>
 </form>

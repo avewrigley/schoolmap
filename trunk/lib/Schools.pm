@@ -28,26 +28,26 @@ sub new
             $self->{centreX}, 
         ];
     }
-    my @where = ();
+    my @where = ( "year = $self->{year}" );
     if ( $self->{source} && $self->{source} ne 'all' )
     {
         push( @where, "$self->{source}.school_id = school.school_id" );
         $self->{from} = "FROM school, $self->{source}";
     }
-    $self->{from} = <<EOF;
-FROM school,school_type
-    LEFT JOIN ofsted ON ofsted.school_id = school.school_id 
-    LEFT JOIN dfes ON dfes.school_id = school.school_id
-    LEFT JOIN isi ON isi.school_id = school.school_id
-EOF
+    $self->{from} = " FROM school";
     $self->{what} = join( ",", @what );
     my $type = $self->{type};
-    push( @where, "school_type.school_id = school.school_id" );
     if ( $type && $type ne 'all' )
     {
         warn "type: $type\n";
-        push( @where, "school_type.type = '$type'" );
+        push( 
+            @where, 
+            "school_type.type = '$type'", 
+            "school_type.school_id = school.school_id"
+        );
+        $self->{from} .= ",school_type ";
     }
+    $self->{from} .= join( "", map " LEFT JOIN $_ ON $_.school_id = school.school_id", qw( ofsted dfes isi ) );
     my ( @select_where, @count_where );
     @select_where = @count_where = @where;
     if ( $self->{minX} && $self->{maxX} && $self->{minY} && $self->{maxY} )
@@ -136,6 +136,23 @@ EOF
     return $xml;
 }
 
+sub years_xml
+{
+    my $self = shift;
+    my $sql = "SELECT DISTINCT year FROM dfes ORDER BY year DESC";
+    my $sth = $self->{dbh}->prepare( $sql );
+    $sth->execute();
+    my $years = $sth->fetchall_arrayref( {} );
+    $sth->finish();
+    my $tt = Template->new( { INCLUDE_PATH => "../templates" } );
+    my $xml;
+    $tt->process( "generic.xml", { tag => 'year', objs => $years }, \$xml ) 
+        || croak $tt->error
+    ;
+    warn $xml;
+    return $xml;
+}
+
 sub sources_xml
 {
     my $self = shift;
@@ -146,7 +163,7 @@ sub sources_xml
     $sth->finish();
     my $tt = Template->new( { INCLUDE_PATH => "../templates" } );
     my $xml;
-    $tt->process( "source.xml", { sources => $sources }, \$xml ) 
+    $tt->process( "generic.xml", { tag => 'source', objs => $sources }, \$xml ) 
         || croak $tt->error
     ;
     warn $xml;
@@ -156,14 +173,14 @@ sub sources_xml
 sub keystages_xml
 {
     my $self = shift;
-    my $sql = "SELECT * from keystage";
+    my $sql = "SELECT * from keystage ORDER BY age";
     my $sth = $self->{dbh}->prepare( $sql );
     $sth->execute();
     my $keystages = $sth->fetchall_arrayref( {} );
     $sth->finish();
     my $tt = Template->new( { INCLUDE_PATH => "../templates" } );
     my $xml;
-    $tt->process( "keystage.xml", { keystages => $keystages }, \$xml ) 
+    $tt->process( "generic.xml", { tag => "keystage", objs => $keystages }, \$xml ) 
         || croak $tt->error
     ;
     warn $xml;
@@ -200,7 +217,6 @@ sub schools_xml
     {
         $types_sth->execute( $school->{school_id} );
         $school->{type} = join " / ", map $_->[0], @{$types_sth->fetchall_arrayref()};
-        warn "type for $school->{school_id} = $school->{type}\n";
         push( @schools, $school );
     }
     my $tt = Template->new( { INCLUDE_PATH => "../templates" } );
