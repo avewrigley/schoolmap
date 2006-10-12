@@ -24,6 +24,13 @@ sub new
     return $self;
 }
 
+sub DESTROY
+{
+    my $self = shift;
+    return unless $self->{dbh};
+    $self->{dbh}->disconnect();
+}
+
 sub get_text_nodes
 {
     my $html = shift;
