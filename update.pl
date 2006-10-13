@@ -492,16 +492,20 @@ SQL
                                 warn "name: $name\n";
                                 my $school_url = URI->new_abs( $url, $lea_link );
                                 $school_url =~ s/\&amp;/&/g;
+                                next ROW if no_update( $school_url );
                                 my @indexes = @{$indexes{$type}};
                                 my @data = @cells[@indexes];
-                                warn "data: @data\n";
-                                for ( @data )
-                                {
-                                    next ROW unless defined $_ && /^[\d.]+\%?$/;
-                                    s/%$//;
-                                }
-                                next ROW if no_update( $school_url );
                                 eval {
+                                    for ( @data )
+                                    {
+                                        unless ( defined $_ && /^[\d.]+\%?$/ )
+                                        {
+                                            die "can't parse data\n";
+                                            next ROW;
+                                        }
+                                        s/%$//;
+                                    }
+                                    warn "data: @data\n";
                                     my ( $school_html ) = get_html( $school_url );
                                     my $address;
                                     die "get $school_url failed\n" unless $school_html;
