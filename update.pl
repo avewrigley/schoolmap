@@ -389,10 +389,24 @@ $update{dfes} = sub {
         ) ]
     );
     my %indexes = (
-        post16 => [0,2],
-        primary => [0,15],
-        ks3 => [0,11],
-        secondary => [0,10],
+        2005 => {
+            primary => [0,15],
+            ks3 => [0,11],
+            secondary => [0,10],
+            post16 => [0,2],
+        },
+        2004 => {
+            primary => [0,14],
+            ks3 => [0,12],
+            secondary => [0,8],
+            post16 => [0,3],
+        },
+        2003 => {
+            primary => [0,14],
+            ks3 => [0,12],
+            secondary => [0,8],
+            post16 => [0,3],
+        },
     );
     my %types = (
         post16 => "post16",
@@ -406,7 +420,7 @@ $update{dfes} = sub {
         region => qr{/performancetables/.*/(?:region|lsc)(\d+).shtml},
         lea => qr{/performancetables/.*\?Mode=Z&No(?:Lea)?=(\d+)},
     );
-    my @years = $opts{year} ? ( $opts{year} ) : qw( 2003 2004 2005 );
+    my @years = $opts{year} ? ( $opts{year} ) : keys %indexes;
     warn "getting data for @years\n";
     my $pm = Parallel::ForkManager->new( scalar( @years ) );
     $pm->run_on_start( sub { warn "start process: @_\n" } );
@@ -493,7 +507,7 @@ SQL
                                 my $school_url = URI->new_abs( $url, $lea_link );
                                 $school_url =~ s/\&amp;/&/g;
                                 next ROW if no_update( $school_url );
-                                my @indexes = @{$indexes{$type}};
+                                my @indexes = @{$indexes{$year}{$type}};
                                 my @data = @cells[@indexes];
                                 eval {
                                     for ( @data )

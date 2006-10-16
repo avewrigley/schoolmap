@@ -13,7 +13,9 @@ var cgi_url = "cgi/schools.cgi";
 var modperl_url = "schools";
 var schools_url = "schools.xml";
 var school_url = "cgi/school.cgi";
-var nearby_url = "http://www.nearby.org.uk/";
+var nearby_url = "http://www.nearby.org.uk/coord.cgi?p=";
+var ononemap_url = "http://ononemap.com/map/?q=";
+
 var icon_root_url = 'http://bluweb.com/us/chouser/gmapez/iconEZ2/';
 var schools;
 var noRedraw = false;
@@ -45,17 +47,23 @@ function clearPostcode()
 function getPostcode()
 {
     var postcode = document.forms[0].postcode.value;
-    nearbyDiv = document.getElementById( "nearby" );
     if ( ! postcode.length )
     {
         postcodePt = false;
         childReplace( nearbyDiv, document.createTextNode( '' ) );
         return;
     }
+    var ononemapDiv = document.getElementById( "ononemap" );
     var a = document.createElement( "A" );
-    a.href = nearby_url + "coord.cgi?p=" + escape( postcode );
+    a.href = ononemap_url + escape( postcode );
+    a.target = "ononemap";
+    a.appendChild( document.createTextNode( "search property near " + postcode + " from ononemap.com" ) );
+    childReplace( ononemapDiv, a );
+    var nearbyDiv = document.getElementById( "nearby" );
+    a = document.createElement( "A" );
+    a.href = nearby_url + escape( postcode );
     a.target = "nearby";
-    a.appendChild( document.createTextNode( "other stuff nearby " + postcode + " from " + nearby_url ) );
+    a.appendChild( document.createTextNode( "other stuff nearby " + postcode + " from nearby.org.uk" ) );
     childReplace( nearbyDiv, a );
     document.forms[0].gotobutton.disabled = true;
     setStatus( "finding " + postcode ); 
