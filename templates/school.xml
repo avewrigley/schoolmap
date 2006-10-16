@@ -1,11 +1,7 @@
-    <schools nschools="[% nschools %]">
-        [%- FOREACH school IN schools %]
-        <school
-            [%- FOREACH key IN school.keys() %]
-                [%- IF school.$key.length %]
-                    [% key | html %]="[% school.$key | html %]"
-                [%- END %]
-            [%- END %]
-        />
+<school
+    [%- FOREACH key IN school.keys() %]
+        [%- IF school.$key.length %]
+            [% key | html %]="[% school.$key | html %]"
         [%- END %]
-    </schools>
+    [%- END %]
+/>
