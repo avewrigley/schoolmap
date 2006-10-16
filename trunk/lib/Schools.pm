@@ -12,6 +12,7 @@ sub new
     my $class = shift;
     my $self = bless { @_ }, $class;
     require DBI;
+    # $self->{debug} = 1;
     $self->{dbh} = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
     my @what = ( "*,school.*" );
     $self->{args} = [];
@@ -28,6 +29,13 @@ sub new
             $self->{centreX}, 
         ];
     }
+    unless ( $self->{year} )
+    {
+        my $years = $self->years();
+        $self->{year} = $years->[0]->{year};
+
+    }
+    warn "year: $self->{year}\n";
     my @where = ( "year = $self->{year}" );
     if ( $self->{source} && $self->{source} ne 'all' )
     {
@@ -79,7 +87,33 @@ sub new
     require Geo::Distance;
     $self->{geo} = Geo::Distance->new;
     $self->{geo}->formula( "cos" );
+    $self->{tt} = Template->new( { INCLUDE_PATH => "/var/www/www.schoolmap.org.uk/templates" } );
     return $self;
+}
+
+sub xml
+{
+    my $self = shift;
+    if ( exists $self->{sources} )
+    {
+        $self->sources_xml();
+    }
+    elsif ( exists $self->{years} )
+    {
+        $self->years_xml();
+    }
+    elsif ( exists $self->{types} )
+    {
+        $self->types_xml();
+    }
+    elsif ( exists $self->{keystages} )
+    {
+        $self->keystages_xml();
+    }
+    else
+    {
+        $self->schools_xml();
+    }
 }
 
 sub count
@@ -119,10 +153,10 @@ EOF
     }
     my $sth = $self->{dbh}->prepare( $sql );
     $sth->execute();
-    my $xml = "<types>";
+    print "<types>";
     while ( my ( $type ) = $sth->fetchrow_array )
     {
-        $xml .= 
+        print
             '<type name="' . 
             encode_entities( $type, '<>&"' )  .
             '" label="' .
@@ -131,12 +165,10 @@ EOF
         ;
     }
     $sth->finish();
-    $xml .= "</types>";
-    warn $xml;
-    return $xml;
+    print "</types>";
 }
 
-sub years_xml
+sub years
 {
     my $self = shift;
     my $sql = "SELECT DISTINCT year FROM dfes ORDER BY year DESC";
@@ -144,13 +176,24 @@ sub years_xml
     $sth->execute();
     my $years = $sth->fetchall_arrayref( {} );
     $sth->finish();
-    my $tt = Template->new( { INCLUDE_PATH => "../templates" } );
-    my $xml;
-    $tt->process( "generic.xml", { tag => 'year', objs => $years }, \$xml ) 
-        || croak $tt->error
-    ;
-    warn $xml;
-    return $xml;
+    return $years;
+}
+
+sub process_template
+{
+    my $self = shift;
+    my $template = shift;
+    my $params = shift;
+    $self->{tt}->process( $template, $params ) || croak $self->{tt}->error;
+    return unless $self->{debug};
+    $self->{tt}->process( $template, $params, \*STDERR );
+}
+
+sub years_xml
+{
+    my $self = shift;
+    my $years = $self->years();
+    $self->process_template( "generic.xml", { tag => 'year', objs => $years } );
 }
 
 sub sources_xml
@@ -161,13 +204,7 @@ sub sources_xml
     $sth->execute();
     my $sources = $sth->fetchall_arrayref( {} );
     $sth->finish();
-    my $tt = Template->new( { INCLUDE_PATH => "../templates" } );
-    my $xml;
-    $tt->process( "generic.xml", { tag => 'source', objs => $sources }, \$xml ) 
-        || croak $tt->error
-    ;
-    warn $xml;
-    return $xml;
+    $self->process_template( "generic.xml", { tag => 'source', objs => $sources } );
 }
 
 sub keystages_xml
@@ -178,13 +215,7 @@ sub keystages_xml
     $sth->execute();
     my $keystages = $sth->fetchall_arrayref( {} );
     $sth->finish();
-    my $tt = Template->new( { INCLUDE_PATH => "../templates" } );
-    my $xml;
-    $tt->process( "generic.xml", { tag => "keystage", objs => $keystages }, \$xml ) 
-        || croak $tt->error
-    ;
-    warn $xml;
-    return $xml;
+    $self->process_template( "generic.xml", { tag => "keystage", objs => $keystages } );
 }
 
 sub schools_xml
@@ -211,25 +242,15 @@ sub schools_xml
     my $nschools = $self->count();
     $nschools = $nrows if $nrows > $nschools;
     warn "nschools: $nschools\n";
-    my @schools;
     my $types_sth = $self->{dbh}->prepare( "SELECT type FROM school_type WHERE school_id = ?" );
+    print qq{<schools nschools="$nschools">};
     while ( my $school = $sth->fetchrow_hashref )
     {
         $types_sth->execute( $school->{school_id} );
         $school->{type} = join " / ", map $_->[0], @{$types_sth->fetchall_arrayref()};
-        push( @schools, $school );
+        $self->process_template( "school.xml", { school => $school } );
     }
-    my $tt = Template->new( { INCLUDE_PATH => "../templates" } );
-    my $xml;
-    $tt->process(
-        "school.xml",
-        {
-            schools => \@schools,
-            nschools => $nschools
-        },
-        \$xml
-    ) || croak $tt->error;
-    return $xml;
+    print qq{</schools>};
 }
 
 1;
