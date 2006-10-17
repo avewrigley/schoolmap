@@ -1,3 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<schools nschools="[% nschools %]">
+[% FOREACH school IN schools %]
 <school
     [%- FOREACH key IN school.keys() %]
         [%- IF school.$key.length %]
@@ -5,3 +8,5 @@
         [%- END %]
     [%- END %]
 />
+[% END %]
+</schools>

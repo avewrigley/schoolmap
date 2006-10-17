@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<rdf:RDF
+    xmlns="http://purl.org/rss/1.0/"
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:georss="http://www.georss.org/georss/"
+>
+    <channel rdf:about="[% url %]">
+        <title>UK School Map</title>
+        <link>http://www.schoolmap.org.uk/"</link>
+        <items>
+            <rdf:Seq>
+[% FOREACH school IN schools %]
+    <rdf:li rdf:resource="http://www.schoolmap.org.uk/school/[% school.school_id %]"/>
+[% END %]
+            </rdf:Seq>
+        </items>
+    </channel>
+[% FOREACH school IN schools %]
+    <item rdf:about="http://www.schoolmap.org.uk/school/[% school.school_id %]">
+        <title>[% school.name | html %]</title>
+        <description>[% school.address | html %]</description>
+        [% IF school.ofsted_url %]<link href="[% school.ofsted_url | html %]"/>[% END %]
+        [% IF school.isi_url %]<link href="[% school.isi_url | html %]"/>[% END %]
+        [% IF school.dfes_url %]<link href="[% school.dfes_url | html %]"/>[% END %]
+        <georss:featuretypetag>school</georss:featuretypetag>
+        <georss:point>[% school.lat %] [% school.lon %]</georss:point>
+    </item>
+[% END %]
+</rdf:RDF>

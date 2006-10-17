@@ -73,21 +73,29 @@ function getPostcode()
 
 function createLinkTo( query_string )
 {
+    var txt = document.createTextNode( "link to this page:" );
     var url = document.URL;
     url = url.replace( /\?.*$/, "" );
     var url = url + "?" + query_string;
     var link1 = document.createElement( "A" );
     link1.href = url;
-    link1.appendChild( document.createTextNode( "link to this page" ) );
+    link1.appendChild( document.createTextNode( "HTML" ) );
     var link2 = document.createElement( "A" );
     url = schools_url + "?" + query_string;
     link2.href = url;
-    link2.appendChild( document.createTextNode( "schools data for this page as XML" ) );
+    link2.appendChild( document.createTextNode( "XML" ) );
+    var link3 = document.createElement( "A" );
+    url = schools_url + "?" + query_string + "&format=georss";
+    link3.href = url;
+    link3.appendChild( document.createTextNode( "GeoRSS" ) );
     linkToDiv = document.getElementById( "linkto" );
     removeChildren( linkToDiv );
+    linkToDiv.appendChild( txt );
     linkToDiv.appendChild( link1 );
-    linkToDiv.appendChild( document.createElement( "BR" ) );
+    linkToDiv.appendChild( document.createTextNode( " | " ) );
     linkToDiv.appendChild( link2 );
+    linkToDiv.appendChild( document.createTextNode( " | " ) );
+    linkToDiv.appendChild( link3 );
 }
 
 function getPostcodeCallback( response )
@@ -194,7 +202,6 @@ function initYearsCallback( response )
         for ( var i = 0; i < yearsXml.length; i++ )
         {
             var year = xml2obj( yearsXml[i] );
-            YAHOO.log( "year: " + year.name );
             addOpt( document.forms[0].year, year.year, year.year );
         }
         if ( params.year ) document.forms[0].year.value = params.year;
@@ -217,7 +224,6 @@ function initKeystagesCallback( response )
         for ( var i = 0; i < keystagesXml.length; i++ )
         {
             var keystage = xml2obj( keystagesXml[i] );
-            YAHOO.log( "keystage: " + keystage.name );
             keystages.push( keystage );
             keystage2str[keystage.name] = keystage.description;
         }
@@ -318,7 +324,7 @@ function get( url, callback )
 {
     var callbacks = {
         success:function(o) {
-            YAHOO.log( "GOT " + current_url );
+            // YAHOO.log( "GOT " + current_url );
             // YAHOO.log( o.responseText );
             setCursor( "default" );
             callback( o );
@@ -337,7 +343,7 @@ function get( url, callback )
             YAHOO.util.Connect.abort( transaction );
         }
     }
-    YAHOO.log( "GET " + url );
+    // YAHOO.log( "GET " + url );
     setCursor( "wait" );
     transaction = YAHOO.util.Connect.asyncRequest( 'GET', url, callbacks );
 }
@@ -422,14 +428,19 @@ function xml2obj( xml )
     return obj;
 }
 
-function createMarker( letter, colour, point )
+function createIcon( letter, colour )
 {
     var image = getIconUrl( letter, colour );
-    var icon = new OpenLayers.Icon(
+    return new OpenLayers.Icon(
         image, 
         new OpenLayers.Size( 20, 34 ),
         new OpenLayers.Pixel( -9, -27 )
     );
+}
+
+function createMarker( letter, colour, point )
+{
+    var icon = createIcon( letter, colour );
     var marker = new OpenLayers.Marker( point, icon );
     markersLayer.addMarker( marker );
     return marker;
@@ -468,8 +479,8 @@ function createSchoolMarker( school, colour )
         school.letter = getLetter( school.type );
         var point = new OpenLayers.LonLat( school.lon, school.lat );
         var marker = createMarker( school.letter, colour, point );
-        // marker.events.register( "mouseover", marker, function() { activateSchool( this.school ) } );
         // marker.events.register( "mouseout", marker, function() { deActivateSchool( this.school ) } );
+        // marker.events.register( "mouseover", marker, function() { activateSchool( this.school ) } );
         marker.events.register( "click", marker, function() { toggleSchool( this.school ) } );
         marker.school = school;
         school.marker = marker;
@@ -510,7 +521,7 @@ function initTableHead( tr )
     createHeadCell( tr, "ofsted report", "link to Ofsted report" );
     createHeadCell( tr, "isi report", "link to Independent Schools Inspectorate report" );
     for ( var i = 0; i < keystages.length; i++ ) 
-        createHeadCell( tr, keystages[i].description, "average score (no. pupils)" );
+        createHeadCell( tr, keystages[i].description, "average score" );
     ;
     createHeadCell( tr, "type", "Type of school" );
     if ( postcodePt ) 
@@ -552,9 +563,13 @@ function initMap()
     map = new OpenLayers.Map( 'map' );
     var gmapLayer = new OpenLayers.Layer.Google( "GMaps" );
     map.addLayer( gmapLayer );
+    // var olLayer = new OpenLayers.Layer.WMS( "OpenLayers WMS", "http://labs.metacarta.com/wms/vmap0", {layers: 'basic'} );
+    // map.addLayer( olLayer );
     map.setCenter( default_centre );
     markersLayer = new OpenLayers.Layer.Markers( "Markers" );
     map.addLayer( markersLayer );
+    // var georssLayer = new OpenLayers.Layer.GeoRSS( "Geograph", "http://www.geograph.org.uk/syndicator.php?format=GeoRSS" );
+    // map.addLayer( georssLayer );
     if ( 
         params.minX &&
         params.minY &&
@@ -642,10 +657,10 @@ function createListRow( no, school )
         var keystage = keystages[i];
         var val = "-";
         var ave = "average_" + keystage.name;
-        var url;
+        var url = false;
         if ( school[ave] && school[ave] != 0 )
         {
-            val = school[ave] + " (" + school["pupils_"+keystage.name] + ")";
+            val = school[ave];
             var year = document.forms[0].year.value;
             url = 
                 school_url + 
@@ -724,8 +739,8 @@ function getIconUrl( letter, colour )
 
 function changeMarkerColour( marker, colour )
 {
-    // var url = getIconUrl( marker.school.letter, colour );
-    // marker.icon.src = url;
+    // var icon = createIcon( marker.school.letter, colour );
+    // marker.icon = icon;
     // markersLayer.redraw();
     createSchoolMarker( marker.school, colour );
     markersLayer.removeMarker( marker );
