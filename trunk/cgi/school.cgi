@@ -16,7 +16,7 @@ require DBI;
 my $dbh;
 
 {
-    my ( %url, %description, %target );
+    my ( @sources, %url, %description, %target );
 
     sub add_source
     {
@@ -31,10 +31,11 @@ my $dbh;
         $url{$source->{name}} = $url;
         $description{$source->{name}} = $source->{description};
         $target{$source->{name}} = "school";
+        push( @sources, $source->{name} );
         $sth->finish();
     }
 
-    sub get_sources { return keys %url; }
+    sub get_sources { return @sources }
     sub get_url { return $url{$_[0]}; }
 
     sub get_tab
@@ -67,43 +68,47 @@ my %formdata = CGI::Lite->new->parse_form_data();
 warn map "$_ = $formdata{$_}\n", keys %formdata;
 my $school_id = $formdata{school_id} or die "no school_id\n";
 $dbh = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
-my $sql = "SELECT * FROM school WHERE school.school_id = '$school_id'";
-my $sth = $dbh->prepare( $sql );
-$sth->execute();
-my $school = $sth->fetchrow_hashref;
-$sth->finish();
-$sql = "SELECT * FROM source";
-$sth = $dbh->prepare( $sql );
-$sth->execute();
+my $school_sql = "SELECT * FROM school WHERE school.school_id = ?";
+my $school_sth = $dbh->prepare( $school_sql );
+$school_sth->execute( $school_id );
+my $school = $school_sth->fetchrow_hashref;
+$school_sth->finish();
+my $source_sql = "SELECT * FROM source WHERE name <> 'dfes'";
+my $source_sth = $dbh->prepare( $source_sql );
+$source_sth->execute();
 my %types = (
     post16 => "GCE and VCE",
     secondary => "GCSE",
     primary => "Key stage 2",
 );
 
-while ( my $source = $sth->fetchrow_hashref )
+while ( my $source = $source_sth->fetchrow_hashref )
 {
-    if ( $source->{name} eq 'dfes' )
+    add_source( $source, "SELECT $source->{name}.$source->{name}_url FROM $source->{name} WHERE $source->{name}.school_id = '$school_id'" );
+}
+
+for my $type ( keys %types )
+{
+    my $year_sql = "SELECT DISTINCT year FROM dfes WHERE dfes.school_id = ? AND ${type}_url IS NOT NULL";
+    my $year_sth = $dbh->prepare( $year_sql );
+    $year_sth->execute( $school_id );
+    my @years = map { $_->[0] } @{$year_sth->fetchall_arrayref()};
+    $year_sth->finish();
+    warn "years: @years\n";
+    for my $year ( @years )
     {
-        for my $type ( keys %types )
-        {
-            my $type_source = {
-                name => "dfes_$type",
-                description => "$source->{description} - $types{$type} ($formdata{year})",
-            };
-            add_source( 
-                $type_source, 
-                "SELECT $source->{name}.${type}_url FROM $source->{name} WHERE $source->{name}.school_id = '$school_id' AND year = '$formdata{year}'" 
-            );
-        }
-    }
-    else
-    {
-        add_source( $source, "SELECT $source->{name}.$source->{name}_url FROM $source->{name} WHERE $source->{name}.school_id = '$school_id'" );
+        my $type_source = {
+            name => "dfes_${year}_$type",
+            description => "$types{$type} ($year)",
+        };
+        add_source( 
+            $type_source, 
+            "SELECT ${type}_url FROM dfes WHERE dfes.school_id = '$school_id' AND year = '$year'" 
+        );
     }
 }
 
-$sth->finish();
+$source_sth->finish();
 $dbh->disconnect();
 my @sources = get_sources();
 my ( $iframe_source, $tabs );
@@ -116,6 +121,10 @@ if ( @sources )
         if ( $formdata{type} )
         {
             $current_source = "$formdata{source}_$formdata{type}";
+            if ( $formdata{year} )
+            {
+                $current_source = "$formdata{source}_$formdata{year}_$formdata{type}";
+            }
         }
     }
     warn "current source: $current_source\n";

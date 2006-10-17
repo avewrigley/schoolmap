@@ -222,6 +222,7 @@ sub schools_xml
 {
     my $self = shift;
     my $sql = "SELECT $self->{what} $self->{from} $self->{select_where}";
+    $self->{format} ||= "xml";
     if ( $self->{order_by} )
     {
         if ( $self->{order_by} eq 'distance' )
@@ -239,18 +240,21 @@ sub schools_xml
     my $sth = $self->{dbh}->prepare( $sql );
     $sth->execute( @{$self->{args}} );
     my $nrows = $sth->rows;
-    my $nschools = $self->count();
-    $nschools = $nrows if $nrows > $nschools;
-    warn "nschools: $nschools\n";
     my $types_sth = $self->{dbh}->prepare( "SELECT type FROM school_type WHERE school_id = ?" );
-    print qq{<schools nschools="$nschools">};
+    my @schools;
     while ( my $school = $sth->fetchrow_hashref )
     {
         $types_sth->execute( $school->{school_id} );
         $school->{type} = join " / ", map $_->[0], @{$types_sth->fetchall_arrayref()};
-        $self->process_template( "school.xml", { school => $school } );
+        push( @schools, $school );
     }
-    print qq{</schools>};
+    my $nschools = $self->count();
+    $nschools = $nrows if $nrows > $nschools;
+    warn "nschools: $nschools\n";
+    $self->process_template( 
+        "school.$self->{format}", 
+        { schools => \@schools, nschools => $nschools }
+    );
 }
 
 1;

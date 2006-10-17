@@ -27,6 +27,7 @@ require HTML::LinkExtractor;
 require Proc::Pidfile;
 use File::Temp qw/ tempfile /;
 use Data::Dumper;
+use CGI::Lite;
 
 my %opts;
 my %update;
@@ -69,7 +70,8 @@ sub get_links
     $lx->parse( \$html );
     my @links = @{$lx->links};
     my @hrefs = map { $_->{href} } grep { $_->{href} } @links;
-    my @fhrefs = grep /$re/, @hrefs;
+    my @dhrefs = map url_decode( $_  ), @hrefs;
+    my @fhrefs = grep /$re/, @dhrefs;
     my @afhrefs = map { URI->new_abs( $_, $url ) } @fhrefs;
     warn "no links match $re on $url\n" unless @afhrefs;
     return @afhrefs;
