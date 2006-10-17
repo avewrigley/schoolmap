@@ -10,13 +10,13 @@
         <items>
             <rdf:Seq>
 [% FOREACH school IN schools %]
-    <rdf:li rdf:resource="http://www.schoolmap.org.uk/school/[% school.school_id %]"/>
+<rdf:li rdf:resource="http://www.schoolmap.org.uk/cgi/school.cgi?school_id=[% school.school_id %]"/>
 [% END %]
             </rdf:Seq>
         </items>
     </channel>
 [% FOREACH school IN schools %]
-    <item rdf:about="http://www.schoolmap.org.uk/school/[% school.school_id %]">
+<item rdf:about="http://www.schoolmap.org.uk/cgi/school.cgi?school_id=[% school.school_id %]">
         <title>[% school.name | html %]</title>
         <description>[% school.address | html %]</description>
         [% IF school.ofsted_url %]<link href="[% school.ofsted_url | html %]"/>[% END %]

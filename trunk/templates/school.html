@@ -1,0 +1,41 @@
+<html>
+    <head>
+        <title>[% school.name | html %]</title>
+        <script type="text/javascript" src="/js/yui/build/yahoo/yahoo.js"></script>
+        <script type="text/javascript" src="/js/yui/build/dom/dom.js"></script> 
+        <link type="text/css" rel="stylesheet" href="/css/navbar.css" /> 
+    </head>
+    <body>
+        [% INCLUDE google.html %]
+        <h2>[% school.name | html %]</h2>
+        <p>[% school.address | html %]</p>
+        <p>[% school.postcode | html %]</p>
+        [% FOREACH link IN links %]
+        <a href="[% link.url | html %]">[% link.description | html %]</a>
+        [% END %]
+        <div id="navcontainer">
+            <ul id="navlist">
+                [% FOREACH tab IN tabs %]
+                    <li><a 
+                        [% IF tab.class %]class="current"[% END %]
+                        target="[% tab.target %]" 
+                        href="[% tab.url %]"
+                        onclick="
+                            try {
+                                var current = YAHOO.util.Dom.getElementsByClassName( 'current' );
+                                current[0].className = '';
+                                this.className = 'current';
+                            }
+                            catch( e ) { alert( e ) }
+                            return true;
+                        "
+                    >[% tab.description | html %]</a></li>
+                [% END %]
+            </ul>
+        </div>
+        <iframe style="border: 0" name="school" width="100%" height="100%" src="[% iframe_source %]"></iframe>
+        <script type="text/javascript">
+            this.frame[0].top = this.frame[0];
+        </script> 
+    </body>
+</html>
