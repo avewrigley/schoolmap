@@ -12,6 +12,7 @@ use warnings;
 
 use CGI::Lite;
 require DBI;
+use Template;
 
 my $dbh;
 
@@ -42,22 +43,12 @@ my $dbh;
     {
         my $source = shift;
         my $class = shift;
-        return <<EOF;
-<li><a 
-    $class 
-    target="$target{$source}" 
-    href="$url{$source}"
-    onclick="
-        try {
-            var current = YAHOO.util.Dom.getElementsByClassName( 'current' );
-            current[0].className = '';
-            this.className = 'current';
+        {
+            target => $target{$source},
+            url => $url{$source},
+            description => $description{$source},
+            class => $class,
         }
-        catch( e ) { alert( e ) }
-        return true;
-    "
->$description{$source}</a></li>
-EOF
     }
 }
 
@@ -111,7 +102,8 @@ for my $type ( keys %types )
 $source_sth->finish();
 $dbh->disconnect();
 my @sources = get_sources();
-my ( $iframe_source, $tabs );
+my ( $iframe_source );
+my @tabs;
 if ( @sources )
 {
     my $current_source = $sources[0];
@@ -129,52 +121,29 @@ if ( @sources )
     }
     warn "current source: $current_source\n";
     $iframe_source = get_url( $current_source );
-    $tabs = '';
     for my $source ( @sources )
     {
-        my $class = '';
-        if ( $current_source eq $source )
-        {
-            $class = 'class="current"';
-        }
-        $tabs .= get_tab( $source, $class );
+        push( @tabs, get_tab( $source, $current_source eq $source ) );
     }
 }
 
 my $name = $school->{name}; 
 $name =~ s/\s+/_/g;
 $name =~ s/[^A-Za-z0-9_]//g;
-my $links = 
-    join " | ",
-    map qq{<a href="$_->{url}">$_->{description}</a>},
-    (
-        { url => "/wiki/index.php/$name", description => "Schoolmap Wiki" },
-        { url => "http://en.wikipedia.org/wiki/$name", description => "Wikipedia entry" },
-    )
-;
-my $html = <<EOF;
-<html>
-    <head>
-        <title>$school->{name}</title>
-        <script type="text/javascript" src="/js/yui/build/yahoo/yahoo.js"></script>
-        <script type="text/javascript" src="/js/yui/build/dom/dom.js"></script> 
-        <link type="text/css" rel="stylesheet" href="/css/navbar.css" /> 
-    </head>
-    <body>
-        <h2>$school->{name}</h2>
-        <p>$school->{address}</p>
-        <p>$school->{postcode}</p>
-        $links
-        <div id="navcontainer"><ul id="navlist">$tabs</ul></div>
-        <iframe style="border: 0" name="school" width="100%" height="100%" src="$iframe_source"></iframe>
-        <script type="text/javascript">
-            this.frame[0].top = this.frame[0];
-        </script> 
-    </body>
-</html>
-EOF
-
-print $html;
+my $tt = Template->new( { INCLUDE_PATH => "/var/www/www.schoolmap.org.uk/templates" } );
+warn "iframe_source => $iframe_source\n";
+$tt->process(
+    "school.html", 
+    { 
+        school => $school,
+        links => [
+            { url => "/wiki/index.php/$name", description => "Schoolmap Wiki" },
+            { url => "http://en.wikipedia.org/wiki/$name", description => "Wikipedia entry" },
+        ],
+        tabs => \@tabs,
+        iframe_source => $iframe_source,
+    }
+);
 
 #------------------------------------------------------------------------------
 #
