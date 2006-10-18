@@ -10,11 +10,11 @@
 use strict;
 use warnings;
 
-use lib "../lib";
+use lib "/var/www/www.schoolmap.org.uk/lib";
 require Schools;
 require CGI::Lite;
 
-open( STDERR, ">>../logs/schools.log" );
+open( STDERR, ">>/var/www/www.schoolmap.org.uk/logs/schools.log" );
 warn "$$ at ", scalar( localtime ), "\n";
 my %formdata = CGI::Lite->new->parse_form_data();
 warn map "$_ = $formdata{$_}\n", keys %formdata if %formdata;

@@ -32,7 +32,7 @@ use CGI::Lite;
 my %opts;
 my %update;
 my @sources = qw( isi ofsted dfes );
-my @opts = qw( flush year=s type=s force source=s silent pidfile! verbose );
+my @opts = qw( region=s lea=s flush year=s type=s force source=s silent pidfile! verbose );
 my $geo;
 my $dbh;
 
@@ -219,9 +219,17 @@ SQL
     for my $region ( get_links( get_html( $base ), $re{region} ) )
     {
         my ( $region_id ) = $region =~ $re{region};
+        if ( $opts{region} )
+        {
+            next unless $region_id eq $opts{region}
+        }
         for my $lea ( get_links( get_html( $region ), $re{lea} ) )
         {
             my ( $lea_id ) = $lea =~ $re{lea};
+            if ( $opts{lea} )
+            {
+                next unless $lea_id eq $opts{lea}
+            };
             for my $type ( get_links( get_html( $lea ), $re{type} ) )
             {
                 my ( $type_id ) = $type =~ $re{type};

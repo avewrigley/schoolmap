@@ -12,7 +12,7 @@ var postcodes_url = "cgi/postcodes.cgi";
 var cgi_url = "cgi/schools.cgi";
 var modperl_url = "schools";
 var schools_url = "schools.xml";
-var school_url = "cgi/school.cgi";
+var school_url = "school";
 var nearby_url = "http://www.nearby.org.uk/coord.cgi?p=";
 var ononemap_url = "http://ononemap.com/map/?q=";
 
@@ -633,7 +633,7 @@ function myround( num, precision )
 function createListRow( no, school )
 {
     var tr = document.createElement("TR");
-    var url = school_url + "?school_id=" + school.school_id;
+    var url = school_url + "/" + school.school_id;
     tr.appendChild( createListTd( no+1, url, school ) );
     tr.appendChild( createListTd( school.name, url, school ) );
     var ofsted = "no";
@@ -641,7 +641,7 @@ function createListRow( no, school )
     if ( school.ofsted_url ) 
     {
         ofsted = "yes";
-        url = school_url + "?source=ofsted&school_id=" + school.school_id;
+        url = school_url + "/" + school.school_id + "?source=ofsted";
     }
     tr.appendChild( createListTd( ofsted, url, school ) );
     var isi = "no";
@@ -649,7 +649,7 @@ function createListRow( no, school )
     if ( school.isi_url ) 
     {
         isi = "yes";
-        url = school_url + "?source=isi&school_id=" + school.school_id;
+        url = school_url + "/" + school.school_id + "?source=isi";
     }
     tr.appendChild( createListTd( isi, url, school ) );
     for ( var i = 0; i < keystages.length; i++ )
@@ -663,9 +663,9 @@ function createListRow( no, school )
             val = school[ave];
             var year = document.forms[0].year.value;
             url = 
-                school_url + 
-                "?source=dfes&school_id=" + 
+                school_url + "/" +
                 school.school_id + 
+                "?source=dfes" +
                 "&type=" + keystage.name +
                 "&year=" + year
             ;
