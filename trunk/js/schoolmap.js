@@ -15,6 +15,9 @@ var schools_url = "schools.xml";
 var school_url = "school";
 var nearby_url = "http://www.nearby.org.uk/coord.cgi?p=";
 var ononemap_url = "http://ononemap.com/map/?q=";
+var gmapLayer;
+var geLayer;
+var olLayer;
 
 var icon_root_url = 'http://bluweb.com/us/chouser/gmapez/iconEZ2/';
 var schools;
@@ -561,13 +564,17 @@ function initMap()
     google_html = googleDiv.innerHTML;
     default_centre = new OpenLayers.LonLat( -1.4881, 52.5713 );
     map = new OpenLayers.Map( 'map' );
-    var gmapLayer = new OpenLayers.Layer.Google( "GMaps" );
+    gmapLayer = new OpenLayers.Layer.Google( "Google Maps" );
     map.addLayer( gmapLayer );
-    // var olLayer = new OpenLayers.Layer.WMS( "OpenLayers WMS", "http://labs.metacarta.com/wms/vmap0", {layers: 'basic'} );
-    // map.addLayer( olLayer );
+    olLayer = new OpenLayers.Layer.WMS( "OpenLayers WMS", "http://labs.metacarta.com/wms/vmap0", {layers: 'basic'} );
+    map.addLayer( olLayer );
+    geLayer = new OpenLayers.Layer.VirtualEarth( "Virtual Earth", { 'type': VEMapStyle.Aerial } );
+    map.addLayer( geLayer );
     map.setCenter( default_centre );
     markersLayer = new OpenLayers.Layer.Markers( "Markers" );
     map.addLayer( markersLayer );
+    map.addControl( new OpenLayers.Control.PanZoomBar() );
+    map.addControl( new OpenLayers.Control.LayerSwitcher() );
     // var georssLayer = new OpenLayers.Layer.GeoRSS( "Geograph", "http://www.geograph.org.uk/syndicator.php?format=GeoRSS" );
     // map.addLayer( georssLayer );
     if ( 
@@ -739,8 +746,8 @@ function getIconUrl( letter, colour )
 
 function changeMarkerColour( marker, colour )
 {
-    // var icon = createIcon( marker.school.letter, colour );
-    // marker.icon = icon;
+    // var image = getIconUrl( letter, colour );
+    // marker.icon.src = image;
     // markersLayer.redraw();
     createSchoolMarker( marker.school, colour );
     markersLayer.removeMarker( marker );
