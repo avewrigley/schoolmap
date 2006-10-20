@@ -17,7 +17,6 @@ sub new
     $self->{dbh} = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap' )
         or croak "Cannot connect: $DBI::errstr"
     ;
-    $self->{sth} = $self->{dbh}->prepare( "SELECT * FROM hwz_postcodes WHERE outcode = ?" );
     return $self;
 }
 
@@ -44,8 +43,10 @@ sub find
     my $pc = shift;
     my $postcode = uc( $pc );
     $postcode =~ s/\s*//g;
-    $self->{sth}->execute( $postcode );
-    my $output = $self->{sth}->fetchrow_hashref;
+    my $sth = $self->{dbh}->prepare( "SELECT * FROM ukpostcode WHERE code = ?" );
+    $sth->execute( $postcode );
+    my $output = $sth->fetchrow_hashref;
+    $sth->finish();
     if ( $output )
     {
         warn "found coords $output->{lat},$output->{lon} in db for $postcode\n";
