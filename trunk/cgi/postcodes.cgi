@@ -19,7 +19,7 @@ my ( $query ) = $ENV{QUERY_STRING} =~ /query=(.*)/;
 warn "query: $query\n";
 print "Content-Type: text/plain\n\n";
 my $dbh = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
-my $sql = "SELECT outcode FROM hwz_postcodes WHERE outcode LIKE '$query%' LIMIT 10";
+my $sql = "SELECT code FROM ukpostcode WHERE code LIKE '$query%' LIMIT 10";
 warn "$sql\n";
 my $sth = $dbh->prepare( $sql );
 $sth->execute();
