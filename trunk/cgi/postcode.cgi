@@ -11,7 +11,7 @@ use strict;
 use warnings;
 
 use lib '../lib';
-require Geo::Multimap;
+require Geo::Hwz;
 require CGI::Lite;
 
 open( STDERR, ">>../logs/postcode.log" );
@@ -20,7 +20,7 @@ my %form = CGI::Lite->new->parse_form_data();
 print "Content-Type: text/xml\n\n<data>";
 if ( $form{postcode} )
 {
-    my $geo = Geo::Multimap->new();
+    my $geo = Geo::Hwz->new();
     my %loc = $geo->find( $form{postcode} );
     if ( %loc )
     {

@@ -19,9 +19,7 @@
 <item rdf:about="http://www.schoolmap.org.uk/school/[% school.school_id %]">
         <title>[% school.name | html %]</title>
         <description>[% school.address | html %]</description>
-        [% IF school.ofsted_url %]<link href="[% school.ofsted_url | html %]"/>[% END %]
-        [% IF school.isi_url %]<link href="[% school.isi_url | html %]"/>[% END %]
-        [% IF school.dfes_url %]<link href="[% school.dfes_url | html %]"/>[% END %]
+        <link href="http://www.schoolmap.org.uk/school/[% school.school_id %]" />
         <georss:featuretypetag>school</georss:featuretypetag>
         <georss:point>[% school.lat %] [% school.lon %]</georss:point>
     </item>

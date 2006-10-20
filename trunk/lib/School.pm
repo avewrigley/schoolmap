@@ -16,7 +16,6 @@ sub new
     $self->{sources} = [];
     $self->{url} = {};
     $self->{description} = {};
-    $self->{target} = {};
     $self->{types} = {
         post16 => "GCE and VCE",
         secondary => "GCSE",
@@ -42,7 +41,6 @@ sub add_source
     return unless $url;
     $self->{url}{$source->{name}} = $url;
     $self->{description}{$source->{name}} = $source->{description};
-    $self->{target}{$source->{name}} = "school";
     push( @{$self->{sources}}, $source->{name} );
     $sth->finish();
 }
@@ -54,7 +52,6 @@ sub get_tab
     my $class = shift;
     warn "get tab for $source\n";
     return {
-        target => $self->{target}{$source},
         url => $self->{url}{$source},
         description => $self->{description}{$source},
         class => $class,

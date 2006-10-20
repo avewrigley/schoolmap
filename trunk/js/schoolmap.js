@@ -16,13 +16,13 @@ var school_url = "school";
 var nearby_url = "http://www.nearby.org.uk/coord.cgi?p=";
 var ononemap_url = "http://ononemap.com/map/?q=";
 var gmapLayer;
-var geLayer;
+var veLayer;
 var olLayer;
+var osLayer;
 
 var icon_root_url = 'http://bluweb.com/us/chouser/gmapez/iconEZ2/';
 var schools;
 var noRedraw = false;
-var active_school;
 var params = new Object();
 var keystages = new Array();
 var keystage2str = new Object();
@@ -268,6 +268,18 @@ function initTypesCallback( response )
     }
     catch(e) { alert( e ) }
 }
+function markersOffScreen()
+{
+    for ( var i = 0; i < markersLayer.markers.length; i++ )
+    {
+        var marker = markersLayer.markers[i];
+        if ( ! marker.onScreen() )
+        {
+            return true;
+        }
+    }
+    return false;
+}
 
 function getSchoolsCallback( response )
 {
@@ -299,25 +311,11 @@ function getSchoolsCallback( response )
         }
         if ( postcodePt )
         {
-            var zl = max_zoom;
             noRedraw = true;
+            map.setCenter( postcodePt );
+            map.zoomTo( max_zoom );
             createMarker( "X", "red", postcodePt );
-            var markersOffScreen = 1;
-            while ( markersOffScreen )
-            {
-                markersOffScreen = 0;
-                map.zoomTo( zl-- );
-                map.setCenter( postcodePt );
-                markersOffScreen = 0;
-                for ( var i = 0; i < markersLayer.markers.length; i++ )
-                {
-                    var marker = markersLayer.markers[i];
-                    if ( ! marker.onScreen() )
-                    {
-                        markersOffScreen++;
-                    }
-                }
-            }
+            while ( markersOffScreen() ) map.zoomOut();
             noRedraw = false;
         }
     } catch( e ) { alert( e ) }
@@ -461,10 +459,13 @@ function addPopup()
     map.addPopup( this.popup, true );
 }
 
+var active_school;
+
 function deActivateSchool( school )
 {
     changeLinksColour( school.links, "blue" )
     changeMarkerColour( school.marker, "blue" )
+    active_school = school;
     school.marker.active = false;
 }
 
@@ -482,9 +483,8 @@ function createSchoolMarker( school, colour )
         school.letter = getLetter( school.type );
         var point = new OpenLayers.LonLat( school.lon, school.lat );
         var marker = createMarker( school.letter, colour, point );
-        // marker.events.register( "mouseout", marker, function() { deActivateSchool( this.school ) } );
-        // marker.events.register( "mouseover", marker, function() { activateSchool( this.school ) } );
-        marker.events.register( "click", marker, function() { toggleSchool( this.school ) } );
+        marker.events.register( "mouseout", marker, function() { changeLinksColour( this.school.links, "blue" ) } );
+        marker.events.register( "mouseover", marker, function() { changeLinksColour( this.school.links, "red" ) } );
         marker.school = school;
         school.marker = marker;
     }
@@ -566,10 +566,12 @@ function initMap()
     map = new OpenLayers.Map( 'map' );
     gmapLayer = new OpenLayers.Layer.Google( "Google Maps" );
     map.addLayer( gmapLayer );
-    olLayer = new OpenLayers.Layer.WMS( "OpenLayers WMS", "http://labs.metacarta.com/wms/vmap0", {layers: 'basic'} );
+    olLayer = new OpenLayers.Layer.WMS( "Metacarta", "http://labs.metacarta.com/wms/vmap0", {layers: 'basic'} );
     map.addLayer( olLayer );
-    geLayer = new OpenLayers.Layer.VirtualEarth( "Virtual Earth", { 'type': VEMapStyle.Aerial } );
-    map.addLayer( geLayer );
+    veLayer = new OpenLayers.Layer.VirtualEarth( "Virtual Earth", { 'type': VEMapStyle.Aerial } );
+    map.addLayer( veLayer );
+    // osLayer = new OpenLayers.Layer.WMS( "Openstreetmap", "http://tile.openstreetmap.org/ruby/wmsmod.rbx?" );
+    // map.addLayer( osLayer );
     map.setCenter( default_centre );
     markersLayer = new OpenLayers.Layer.Markers( "Markers" );
     map.addLayer( markersLayer );
@@ -610,7 +612,7 @@ function createListTd( text, url, school )
     {
         var a = document.createElement( "A" );
         a.target = school.school_id;
-        a.onclick = function() { window.open( url, "_new", "status,scrollbars" ); return false; };
+        a.onclick = function() { window.open( url, "school", "status,scrollbars,resizable" ); return false; };
         a.href = url;
         if ( ! school.links ) school.links = new Array();
         school.links.push( a );
@@ -760,17 +762,6 @@ function changeLinksColour( links, color )
     {
         link = links[i];
         link.style.color = color;
-    }
-}
-
-function toggleSchool( school )
-{
-    if ( school.active ) deActivateSchool( school );
-    else 
-    {
-        if ( active_school ) deActivateSchool( active_school );
-        activateSchool( school );
-        active_school = school;
     }
 }
 
