@@ -19,7 +19,7 @@
                 [% FOREACH tab IN tabs %]
                     <li><a 
                         [% IF tab.class %]class="current"[% END %]
-                        target="[% tab.target %]" 
+                        target="details" 
                         href="[% tab.url %]"
                         onclick="
                             try {
@@ -34,7 +34,7 @@
                 [% END %]
             </ul>
         </div>
-        <iframe style="border: 0" name="school" width="100%" height="100%" src="[% iframe_source %]"></iframe>
+        <iframe style="border: 0" name="details" width="100%" height="100%" src="[% iframe_source %]"></iframe>
         <hr />
         [% INCLUDE footer.html %]
     </body>

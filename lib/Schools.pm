@@ -84,9 +84,6 @@ sub new
     }
     $self->{select_where} = @select_where ? "WHERE " . join( " AND ", @select_where ) : '';
     $self->{count_where} = @count_where ? "WHERE " . join( " AND ", @count_where ) : '';
-    require Geo::Distance;
-    $self->{geo} = Geo::Distance->new;
-    $self->{geo}->formula( "cos" );
     $self->{tt} = Template->new( { INCLUDE_PATH => "/var/www/www.schoolmap.org.uk/templates" } );
     return $self;
 }
