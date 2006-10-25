@@ -296,7 +296,6 @@ function getSchoolsCallback( response )
         removeChildren( listDiv );
         googleDiv.innerHTML = google_html;
         var xmlDoc = response.responseXML;
-        var nschools = xmlDoc.documentElement.getAttribute( 'nschools' );
         var schoolsXml = xmlDoc.documentElement.getElementsByTagName( "school" );
         for ( var i = 0; i < schoolsXml.length; i++ )
         {
@@ -304,12 +303,9 @@ function getSchoolsCallback( response )
             schools.push( school );
             createSchoolMarker( school, "blue" );
         }
-        if ( nschools && schoolsXml.length )
+        if ( schoolsXml.length )
         {
             listDiv.appendChild( createListTable() );
-            var b = document.createElement( "B" );
-            b.appendChild( document.createTextNode( schoolsXml.length + " / " + nschools + " schools" ) );
-            listDiv.appendChild( b );
         }
         else
         {
@@ -325,6 +321,43 @@ function getSchoolsCallback( response )
             noRedraw = false;
         }
     } catch( e ) { alert( e ) }
+    getNSchools();
+}
+
+function getNSchools()
+{
+    if ( noRedraw ) return;
+    setOrderBy();
+    var type = document.forms[0].type.value;
+    var source = document.forms[0].source.value;
+    var order_by = document.forms[0].order_by.value;
+    var year = document.forms[0].year.value;
+    var bounds = map.getExtent();
+    var query_string = 
+        "count=1" +
+        "source=" + escape( source ) +
+        "&year=" + escape( year ) +
+        "&type=" + escape( type ) +
+        "&minLon=" + escape( bounds.left ) + 
+        "&maxLon=" + escape( bounds.right ) + 
+        "&minLat=" + escape( bounds.bottom ) + 
+        "&maxLat=" + escape( bounds.top )
+    ;
+    var url = schools_url + "?" + query_string;
+    get( url, getNSchoolsCallback );
+}
+
+function getNSchoolsCallback( response )
+{
+    var xmlDoc = response.responseXML;
+    var schoolsXml = xmlDoc.documentElement.getElementsByTagName( "schools" );
+    if ( schoolsXml[0] )
+    {
+        var obj = xml2obj( schoolsXml[0] );
+        var b = document.createElement( "B" );
+        b.appendChild( document.createTextNode( schools.length + " / " + obj.count + " schools" ) );
+        listDiv.appendChild( b );
+    }
 }
 
 function get( url, callback )
@@ -397,10 +430,10 @@ function getSchools()
         "&type=" + escape( type ) +
         "&order_by=" + escape( order_by ) +
         "&limit=" + escape( document.forms[0].limit.value ) +
-        "&minX=" + escape( bounds.left ) + 
-        "&maxX=" + escape( bounds.right ) + 
-        "&minY=" + escape( bounds.bottom ) + 
-        "&maxY=" + escape( bounds.top )
+        "&minLon=" + escape( bounds.left ) + 
+        "&maxLon=" + escape( bounds.right ) + 
+        "&minLat=" + escape( bounds.bottom ) + 
+        "&maxLat=" + escape( bounds.top )
     ;
     if ( postcodePt )
     {
@@ -590,13 +623,13 @@ function initMap()
     // var georssLayer = new OpenLayers.Layer.GeoRSS( "Geograph", "http://www.geograph.org.uk/syndicator.php?format=GeoRSS" );
     // map.addLayer( georssLayer );
     if ( 
-        params.minX &&
-        params.minY &&
-        params.maxX &&
-        params.maxY
+        params.minLon &&
+        params.minLat &&
+        params.maxLon &&
+        params.maxLat
     )
     {
-        var bounds = new OpenLayers.Bounds( params.minX, params.minY, params.maxX, params.maxY );
+        var bounds = new OpenLayers.Bounds( params.minLon, params.minLat, params.maxLon, params.maxLat );
         map.zoomToExtent( bounds );
     }
     else
