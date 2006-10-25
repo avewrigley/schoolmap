@@ -13,7 +13,14 @@ my $logfile = '/var/www/www.schoolmap.org.uk/logs/schools_modperl.log';
 sub params
 {
     my $r = shift;
-    return map { split( "=", $_, 2 ) } split( "&", decode( $r->args() ) );
+    my @args = split( "&", decode( $r->args() ) );
+    my %params;
+    for my $arg ( @args )
+    {
+        my ( $key, $val ) = split( "=", $arg, 2 );
+        $params{$key} = $val;
+    }
+    return %params;
 }
 
 sub decode

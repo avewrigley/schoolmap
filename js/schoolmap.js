@@ -112,11 +112,17 @@ function getPostcodeCallback( response )
         alert( "can't find postcode " + postcode );
         return;
     }
-    var x = coords[0].getAttribute( "lon" );
-    var y = coords[0].getAttribute( "lat" );
+    var x = coords[0].getAttribute( "x" );
+    document.forms[1].x.value = x;
+    var y = coords[0].getAttribute( "y" );
+    document.forms[1].y.value = y;
+    var lon = coords[0].getAttribute( "lon" );
+    document.forms[1].lon.value = lon;
+    var lat = coords[0].getAttribute( "lat" );
+    document.forms[1].lat.value = lat;
     var code = coords[0].getAttribute( "code" );
     document.forms[0].postcode.value = code;
-    postcodePt = new OpenLayers.LonLat( x, y );
+    postcodePt = new OpenLayers.LonLat( lon, lat );
     createMarker( "X", "red", postcodePt );
     map.setCenter( postcodePt );
     var postcode = document.forms[0].postcode.value;
@@ -398,20 +404,24 @@ function getSchools()
     ;
     if ( postcodePt )
     {
+        var x = document.forms[1].x.value;
+        var y = document.forms[1].y.value;
         query_string +=
-            "&centreX=" + escape( postcodePt.lon ) +
-            "&centreY=" + escape( postcodePt.lat ) +
+            "&centreLon=" + escape( postcodePt.lon ) +
+            "&centreLat=" + escape( postcodePt.lat ) +
+            "&centreX=" + escape( x ) +
+            "&centreY=" + escape( y ) +
             "&postcode=" + escape( document.forms[0].postcode.value )
         ;
     }
-    else
-    {
-        var centre = map.getCenter();
-        query_string +=
-            "&centreX=" + escape( centre.lon ) +
-            "&centreY=" + escape( centre.lat )
-        ;
-    }
+    // else
+    // {
+        // var centre = map.getCenter();
+        // query_string +=
+            // "&centreLon=" + escape( centre.lon ) +
+            // "&centreLat=" + escape( centre.lat )
+        // ;
+    // }
     schools = new Array();
     var url = schools_url + "?" + query_string;
     createLinkTo( query_string );
@@ -593,9 +603,9 @@ function initMap()
     {
         map.zoomTo( default_zoom );
     }
-    if ( params.centreX && params.centreY )
+    if ( params.centreLon && params.centreLat )
     {
-        var centre = new OpenLayers.LonLat( params.centreX, params.centreY );
+        var centre = new OpenLayers.LonLat( params.centreLon, params.centreLat );
         map.setCenter( centre );
     }
     map.events.register( "zoomend", map, getSchools );
@@ -688,8 +698,8 @@ function createListRow( no, school )
     tr.appendChild( createListTd( type ) );
     if ( postcodePt )
     {
-        var dist = sprintf( "%0.2f", school.distance );
-        tr.appendChild( createListTd( dist + " miles" ) );
+        var dist = sprintf( "%0.2f", ( school.distance / 1000 ) );
+        tr.appendChild( createListTd( dist + " km" ) );
     }
     return tr;
 }

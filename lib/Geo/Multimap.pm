@@ -20,7 +20,7 @@ sub new
         or croak "Cannot connect: $DBI::errstr"
     ;
     $self->{ssth} = $self->{dbh}->prepare( "SELECT * FROM postcode WHERE code = ?" );
-    $self->{isth} = $self->{dbh}->prepare( "INSERT INTO postcode (code, lat, lon) VALUES ( ?, ?, ? )" );
+    $self->{isth} = $self->{dbh}->prepare( "INSERT INTO postcode (code, lat, lon, x, y ) VALUES ( ?, ?, ?, ?, ? )" );
     return $self;
 }
 
@@ -28,6 +28,8 @@ sub DESTROY
 {
     my $self = shift;
     return unless $self->{dbh};
+    $self->{ssth}->finish();
+    $self->{isth}->finish();
     $self->{dbh}->disconnect();
 }
 
@@ -102,11 +104,23 @@ sub find
     my $output = $self->db_find( $postcode );
     return %$output if $output;
     my $url = "$multimap_url$postcode";
-    my ( $lat, $lon );
+    my ( $x, $y, $lat, $lon );
     my $html = get( $url );
     warn "failed to get $url\n" and return unless $html;
     for ( get_text_nodes( $html, _tag => 'dd' ) )
     {
+        if ( /^(\d+)m$/ )
+        {
+            if ( defined( $x ) )
+            {
+                $y = $1;
+            }
+            else
+            {
+                $x = $1;
+            }
+
+        }
         if ( /\d{1,2}:\d{1,2}:\d{1,2}[NS] \((-?[0-9.]+)\)/ )
         {
             $lat = $1;
@@ -115,16 +129,15 @@ sub find
         {
             $lon = $1;
         }
-        last if $lat && $lon;
     }
-    unless ( $lat && $lon )
+    unless ( defined( $lat ) && defined( $lon ) && defined( $x ) && defined( $y ) )
     {
-        warn "can't get coords for $postcode from $url\n";
+        warn "can't get coords for $postcode from $url ($lat, $lon, $x, $y)\n";
         return;
     }
     warn "found coords $lat,$lon for $postcode from $url\n";
-    $self->{isth}->execute( $postcode, $lat, $lon );
-    return ( code => $postcode, lat => $lat, lon => $lon );
+    $self->{isth}->execute( $postcode, $lat, $lon, $x, $y );
+    return ( code => $postcode, lat => $lat, lon => $lon, x => $x, y => $y );
 }
 
 #------------------------------------------------------------------------------
