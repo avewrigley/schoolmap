@@ -20,27 +20,13 @@ sub new
         $self->{year} = $years->[0]->{year};
 
     }
-    warn "year: $self->{year}\n";
-    my @where = ( "year = $self->{year}", "school.postcode = postcode.code" );
-    my @what = ( "*" );
-    my @args = ();
+    my @where = ( "school.postcode = postcode.code" );
     my @from = ( "school", "postcode" );
-    if ( $self->{centreX} && $self->{centreY} )
-    {
-        push( 
-            @what, 
-            "GLength(LineStringFromWKB(LineString(AsBinary(GeomFromText(?)), AsBinary(postcode.location)))) AS distance",
-            # "acos( ( sin( ? ) * sin( school.lat ) ) + ( cos( ? ) * cos( school.lat ) * cos( school.lon - ? ) ) ) AS geo_dist"
-        );
-        push( @args, "POINT( $self->{centreX} $self->{centreY} )" );
-    }
     if ( $self->{source} && $self->{source} ne 'all' )
     {
         push( @where, "$self->{source}.school_id = school.school_id" );
         push( @from, $self->{source} );
     }
-    $self->{args} = \@args;
-    $self->{what} = join( ",", @what );
     my $type = $self->{type};
     if ( $type && $type ne 'all' )
     {
@@ -52,36 +38,20 @@ sub new
         );
         push( @from, "school_type" );
     }
-    $self->{join} = join( "", map " LEFT JOIN $_ ON $_.school_id = school.school_id", qw( ofsted dfes isi ) );
     $self->{from} = "FROM " . join( ",", @from );
-    my ( @select_where, @count_where );
-    @select_where = @count_where = @where;
-    if ( $self->{minX} && $self->{maxX} && $self->{minY} && $self->{maxY} )
+    if ( $self->{minLon} && $self->{maxLon} && $self->{minLat} && $self->{maxLat} )
     {
-        if ( $self->{order_by} ne 'distance' )
-        {
-            push( 
-                @select_where,
-                (
-                    "postcode.lon > $self->{minX}",
-                    "postcode.lon < $self->{maxX}",
-                    "postcode.lat > $self->{minY}",
-                    "postcode.lat < $self->{maxY}",
-                )
-            );
-        }
         push( 
-            @count_where,
+            @where,
             (
-                "postcode.lon > $self->{minX}",
-                "postcode.lon < $self->{maxX}",
-                "postcode.lat > $self->{minY}",
-                "postcode.lat < $self->{maxY}",
+                "postcode.lon > $self->{minLon}",
+                "postcode.lon < $self->{maxLon}",
+                "postcode.lat > $self->{minLat}",
+                "postcode.lat < $self->{maxLat}",
             )
         );
     }
-    $self->{select_where} = @select_where ? "WHERE " . join( " AND ", @select_where ) : '';
-    $self->{count_where} = @count_where ? "WHERE " . join( " AND ", @count_where ) : '';
+    $self->{where} = \@where;
     $self->{tt} = Template->new( { INCLUDE_PATH => "/var/www/www.schoolmap.org.uk/templates" } );
     return $self;
 }
@@ -105,23 +75,14 @@ sub xml
     {
         $self->keystages_xml();
     }
+    elsif ( exists $self->{count} )
+    {
+        $self->count_xml();
+    }
     else
     {
         $self->schools_xml();
     }
-}
-
-sub count
-{
-    my $self = shift;
-    my $sql = <<EOF;
-SELECT count( * ) $self->{from} $self->{join} $self->{count_where}
-EOF
-    warn $sql;
-    my $sth = $self->{dbh}->prepare( $sql );
-    $sth->execute();
-    my ( $nschools ) = $sth->fetchrow_array;
-    return $nschools;
 }
 
 my %label = (
@@ -216,7 +177,22 @@ sub keystages_xml
 sub schools_xml
 {
     my $self = shift;
-    my $sql = "SELECT $self->{what} $self->{from} $self->{join} $self->{select_where}";
+    my @args;
+    my @what = ( "*,school.*" );
+    if ( $self->{centreX} && $self->{centreY} )
+    {
+        push( 
+            @what, 
+            "GLength(LineStringFromWKB(LineString(AsBinary(GeomFromText(?)), AsBinary(postcode.location)))) AS distance",
+        );
+        push( @args, "POINT( $self->{centreX} $self->{centreY} )" );
+    }
+    my $what = join( ",", @what );
+    my $join = join( "", map " LEFT JOIN $_ ON $_.school_id = school.school_id", qw( ofsted dfes isi ) );
+    my @where = @{$self->{where}};
+    push( @where, "year = $self->{year}" ) if $self->{year};
+    my $where = @where ? "WHERE " . join( " AND ", @where ) : '';
+    my $sql = "SELECT $what $self->{from} $join $where";
     $self->{format} ||= "xml";
     if ( $self->{order_by} )
     {
@@ -233,10 +209,9 @@ sub schools_xml
     $limit = $self->{limit} if defined $self->{limit};
     $sql .= " LIMIT $limit";
     warn "$sql\n";
-    warn "ARGS: @{$self->{args}}\n";
+    warn "ARGS: @args\n";
     my $sth = $self->{dbh}->prepare( $sql );
-    $sth->execute( @{$self->{args}} );
-    my $nrows = $sth->rows;
+    $sth->execute( @args );
     my $types_sth = $self->{dbh}->prepare( "SELECT type FROM school_type WHERE school_id = ?" );
     my @schools;
     while ( my $school = $sth->fetchrow_hashref )
@@ -246,12 +221,26 @@ sub schools_xml
         delete $school->{location};
         push( @schools, $school );
     }
-    my $nschools = $self->count();
-    $nschools = $nrows if $nrows > $nschools;
-    warn "nschools: $nschools\n";
     $self->process_template( 
         "school.$self->{format}", 
-        { schools => \@schools, nschools => $nschools }
+        { schools => \@schools }
+    );
+}
+
+sub count_xml
+{
+    my $self = shift;
+    my @where = @{$self->{where}};
+    my $where = @where ? "WHERE " . join( " AND ", @where ) : '';
+    my $sql = "SELECT COUNT( * ) $self->{from} $where";
+    $self->{format} ||= "xml";
+    warn "$sql\n";
+    my $sth = $self->{dbh}->prepare( $sql );
+    $sth->execute();
+    my ( $count ) = $sth->fetchrow;
+    $self->process_template( 
+        "count.xml", 
+        { count => $count }
     );
 }
 

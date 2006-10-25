@@ -24,11 +24,6 @@ sub handler
         $r->send_http_header('text/plain');
         $r->print( $ofsted->types() );
     }
-    elsif ( $params{count} )
-    {
-        $r->send_http_header('text/plain');
-        $r->print( $ofsted->schools_count() );
-    }
     else
     {
         $r->send_http_header('text/xml');
