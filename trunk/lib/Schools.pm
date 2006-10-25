@@ -14,21 +14,6 @@ sub new
     require DBI;
     # $self->{debug} = 1;
     $self->{dbh} = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
-    my @what = ( "*,school.*" );
-    $self->{args} = [];
-    if ( $self->{centreX} && $self->{centreY} )
-    {
-        push( 
-            @what, 
-            "(((acos(sin((?*pi()/180)) * sin((school.lat*pi()/180)) + cos((?*pi()/180)) * cos((school.lat*pi()/180)) * cos(((? - school.lon)*pi()/180))))*180/pi())*60*1.1515) as distance",
-            # "acos( ( sin( ? ) * sin( school.lat ) ) + ( cos( ? ) * cos( school.lat ) * cos( school.lon - ? ) ) ) AS geo_dist"
-        );
-        $self->{args} = [
-            $self->{centreY},
-            $self->{centreY},
-            $self->{centreX}, 
-        ];
-    }
     unless ( $self->{year} )
     {
         my $years = $self->years();
@@ -36,13 +21,25 @@ sub new
 
     }
     warn "year: $self->{year}\n";
-    my @where = ( "year = $self->{year}" );
+    my @where = ( "year = $self->{year}", "school.postcode = postcode.code" );
+    my @what = ( "*" );
+    my @args = ();
+    my @from = ( "school", "postcode" );
+    if ( $self->{centreX} && $self->{centreY} )
+    {
+        push( 
+            @what, 
+            "GLength(LineStringFromWKB(LineString(AsBinary(GeomFromText(?)), AsBinary(postcode.location)))) AS distance",
+            # "acos( ( sin( ? ) * sin( school.lat ) ) + ( cos( ? ) * cos( school.lat ) * cos( school.lon - ? ) ) ) AS geo_dist"
+        );
+        push( @args, "POINT( $self->{centreX} $self->{centreY} )" );
+    }
     if ( $self->{source} && $self->{source} ne 'all' )
     {
         push( @where, "$self->{source}.school_id = school.school_id" );
-        $self->{from} = "FROM school, $self->{source}";
+        push( @from, $self->{source} );
     }
-    $self->{from} = " FROM school";
+    $self->{args} = \@args;
     $self->{what} = join( ",", @what );
     my $type = $self->{type};
     if ( $type && $type ne 'all' )
@@ -53,9 +50,10 @@ sub new
             "school_type.type = '$type'", 
             "school_type.school_id = school.school_id"
         );
-        $self->{from} .= ",school_type ";
+        push( @from, "school_type" );
     }
-    $self->{from} .= join( "", map " LEFT JOIN $_ ON $_.school_id = school.school_id", qw( ofsted dfes isi ) );
+    $self->{join} = join( "", map " LEFT JOIN $_ ON $_.school_id = school.school_id", qw( ofsted dfes isi ) );
+    $self->{from} = "FROM " . join( ",", @from );
     my ( @select_where, @count_where );
     @select_where = @count_where = @where;
     if ( $self->{minX} && $self->{maxX} && $self->{minY} && $self->{maxY} )
@@ -65,20 +63,20 @@ sub new
             push( 
                 @select_where,
                 (
-                    "school.lon > $self->{minX}",
-                    "school.lon < $self->{maxX}",
-                    "school.lat > $self->{minY}",
-                    "school.lat < $self->{maxY}",
+                    "postcode.lon > $self->{minX}",
+                    "postcode.lon < $self->{maxX}",
+                    "postcode.lat > $self->{minY}",
+                    "postcode.lat < $self->{maxY}",
                 )
             );
         }
         push( 
             @count_where,
             (
-                "school.lon > $self->{minX}",
-                "school.lon < $self->{maxX}",
-                "school.lat > $self->{minY}",
-                "school.lat < $self->{maxY}",
+                "postcode.lon > $self->{minX}",
+                "postcode.lon < $self->{maxX}",
+                "postcode.lat > $self->{minY}",
+                "postcode.lat < $self->{maxY}",
             )
         );
     }
@@ -117,7 +115,7 @@ sub count
 {
     my $self = shift;
     my $sql = <<EOF;
-SELECT count( * ) $self->{from} $self->{count_where}
+SELECT count( * ) $self->{from} $self->{join} $self->{count_where}
 EOF
     warn $sql;
     my $sth = $self->{dbh}->prepare( $sql );
@@ -218,7 +216,7 @@ sub keystages_xml
 sub schools_xml
 {
     my $self = shift;
-    my $sql = "SELECT $self->{what} $self->{from} $self->{select_where}";
+    my $sql = "SELECT $self->{what} $self->{from} $self->{join} $self->{select_where}";
     $self->{format} ||= "xml";
     if ( $self->{order_by} )
     {
@@ -231,7 +229,9 @@ sub schools_xml
             $sql .= " ORDER BY average_$self->{order_by} DESC";
         }
     }
-    $sql .= " LIMIT $self->{limit}" if $self->{limit};
+    my $limit = 50;
+    $limit = $self->{limit} if defined $self->{limit};
+    $sql .= " LIMIT $limit";
     warn "$sql\n";
     warn "ARGS: @{$self->{args}}\n";
     my $sth = $self->{dbh}->prepare( $sql );
@@ -243,6 +243,7 @@ sub schools_xml
     {
         $types_sth->execute( $school->{school_id} );
         $school->{type} = join " / ", map $_->[0], @{$types_sth->fetchall_arrayref()};
+        delete $school->{location};
         push( @schools, $school );
     }
     my $nschools = $self->count();

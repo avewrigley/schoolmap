@@ -1,5 +1,4 @@
-#!/usr/bin/perl -T
-# set filetype=perl
+#!/usr/bin/env perl
 
 #------------------------------------------------------------------------------
 #
@@ -10,24 +9,26 @@
 use strict;
 use warnings;
 
-use lib '../lib';
-require Geo::Hwz;
-require CGI::Lite;
+use DBI;
+use lib "lib";
+use Geo::Multimap;
 
-open( STDERR, ">>../logs/postcode.log" );
-warn "$$ at ", scalar( localtime ), "\n";
-my %form = CGI::Lite->new->parse_form_data();
-print "Content-Type: text/xml\n\n<data>";
-if ( $form{postcode} )
+# open( STDERR, ">logs/sp.log" );
+my $dbh = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
+my $ssth = $dbh->prepare( "SELECT school_id, postcode FROM school" );
+my $usth = $dbh->prepare( "UPDATE school SET postcode = ? WHERE school_id = ?" );
+my $geo = Geo::Multimap->new();
+$ssth->execute();
+while ( my $loc = $ssth->fetchrow_hashref )
 {
-    my $geo = Geo::Hwz->new();
-    my %loc = $geo->find( $form{postcode} );
-    if ( %loc )
-    {
-        print "<coords ", map( "$_=\"$loc{$_}\" ", qw( x y lat lon code ) ), "/>";
-    }
+    my $postcode = uc( $loc->{postcode} );
+    $postcode =~ s/[^0-9A-Z]//g;
+    warn "$loc->{postcode} -> $postcode for $loc->{school_id}\n";
+    $usth->execute( $postcode, $loc->{school_id} );
 }
-print "</data>";
+$ssth->finish();
+$usth->finish();
+$dbh->disconnect();
 
 #------------------------------------------------------------------------------
 #

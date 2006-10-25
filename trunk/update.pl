@@ -92,6 +92,8 @@ sub create_school
     my $address = shift;
     die "no name" unless $name;
     die "no postcode" unless $postcode;
+    $postcode = uc( $postcode );
+    $postcode =~ s/[^0-9A-Z]//g;
     my ( $lat, $lon ) = $geo->coords( $postcode );
     die "no lat / lon for postcode $postcode" unless $lat && $lon;
     my $select_sth = $dbh->prepare( <<SQL );
@@ -105,9 +107,9 @@ SQL
         return $school_id if defined $school_id;
     }
     my $replace_sth = $dbh->prepare( <<SQL );
-REPLACE INTO school ( name, postcode, lat, lon, address ) VALUES ( ?,?,?,?,? )
+REPLACE INTO school ( name, postcode address ) VALUES ( ?,?,? )
 SQL
-    $replace_sth->execute( $name, $postcode, $lat, $lon, $address );
+    $replace_sth->execute( $name, $postcode, $address );
     $replace_sth->finish();
     $select_sth->execute( $name, $postcode );
     ( $school_id ) = $select_sth->fetchrow;

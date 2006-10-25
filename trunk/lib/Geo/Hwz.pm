@@ -43,7 +43,7 @@ sub find
     my $pc = shift;
     my $postcode = uc( $pc );
     $postcode =~ s/\s*//g;
-    my $sth = $self->{dbh}->prepare( "SELECT * FROM ukpostcode WHERE code = ?" );
+    my $sth = $self->{dbh}->prepare( "SELECT * FROM postcode WHERE code = ?" );
     $sth->execute( $postcode );
     my $output = $sth->fetchrow_hashref;
     $sth->finish();

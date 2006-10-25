@@ -1,5 +1,4 @@
-#!/usr/bin/perl -T
-# set filetype=perl
+#!/usr/bin/env perl
 
 #------------------------------------------------------------------------------
 #
@@ -10,24 +9,24 @@
 use strict;
 use warnings;
 
-use lib '../lib';
-require Geo::Hwz;
-require CGI::Lite;
+use DBI;
+use lib "lib";
 
-open( STDERR, ">>../logs/postcode.log" );
-warn "$$ at ", scalar( localtime ), "\n";
-my %form = CGI::Lite->new->parse_form_data();
-print "Content-Type: text/xml\n\n<data>";
-if ( $form{postcode} )
+# open( STDERR, ">logs/sp.log" );
+my $dbh = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
+my $ssth = $dbh->prepare( "SELECT * FROM postcode" );
+my $usth = $dbh->prepare( "UPDATE postcode SET location = GeomFromText( ? ) WHERE code = ?" );
+$ssth->execute();
+while ( my $school = $ssth->fetchrow_hashref )
 {
-    my $geo = Geo::Hwz->new();
-    my %loc = $geo->find( $form{postcode} );
-    if ( %loc )
-    {
-        print "<coords ", map( "$_=\"$loc{$_}\" ", qw( x y lat lon code ) ), "/>";
-    }
+    warn "$school->{code}\n";
+    die "no x" unless defined $school->{x};
+    die "no y" unless defined $school->{y};
+    $usth->execute( "POINT($school->{x} $school->{y})", $school->{code} );
 }
-print "</data>";
+$ssth->finish();
+$usth->finish();
+$dbh->disconnect();
 
 #------------------------------------------------------------------------------
 #
