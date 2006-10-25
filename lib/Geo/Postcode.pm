@@ -1,4 +1,4 @@
-package Geo::Hwz;
+package Geo::Postcode;
 
 $VERSION = '1.00';
 
