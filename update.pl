@@ -18,6 +18,7 @@ use FindBin qw( $Bin );
 use lib "$Bin/lib";
 require HTML::TableContentParser;
 require HTML::TableParser;
+require HTML::TableExtract;
 use Pod::Usage;
 use Getopt::Long;
 require Geo::Multimap;
@@ -30,9 +31,8 @@ use Data::Dumper;
 use CGI::Lite;
 
 my %opts;
-my %update;
-my @sources = qw( isi ofsted dfes );
-my @opts = qw( region=s lea=s flush year=s type=s force source=s silent pidfile! verbose );
+my @opts = qw( flush year=s type=s force silent pidfile! verbose );
+my $region;
 my $geo;
 my $dbh;
 
@@ -80,8 +80,20 @@ sub get_links
 sub get_html
 {
     my $url = shift;
+    my $force = shift;
+    unless ( $force || $opts{force} )
+    {
+        warn "$url ...\n";
+        my $requested = get_requested( $url );
+        if ( $requested )
+        {
+            warn "$url already requested at $requested\n";
+            return ( undef, undef );
+        }
+    }
     warn "get $url\n";
     my $html = get( $url ) || warn "get $url failed";
+    set_modtime( $url );
     return ( $html, $url );
 }
 
@@ -90,11 +102,16 @@ sub create_school
     my $name = shift;
     my $postcode = shift;
     my $address = shift;
+    my $lat = shift;
+    my $lon = shift;
     die "no name" unless $name;
     die "no postcode" unless $postcode;
     $postcode = uc( $postcode );
     $postcode =~ s/[^0-9A-Z]//g;
-    my ( $lat, $lon ) = $geo->coords( $postcode );
+    unless ( $lat && $lon )
+    {
+        ( $lat, $lon ) = $geo->coords( $postcode );
+    }
     die "no lat / lon for postcode $postcode" unless $lat && $lon;
     my $select_sth = $dbh->prepare( <<SQL );
 SELECT school_id FROM school WHERE name = ? AND postcode = ?
@@ -107,7 +124,7 @@ SQL
         return $school_id if defined $school_id;
     }
     my $replace_sth = $dbh->prepare( <<SQL );
-REPLACE INTO school ( name, postcode address ) VALUES ( ?,?,? )
+REPLACE INTO school ( name, postcode, address ) VALUES ( ?,?,? )
 SQL
     $replace_sth->execute( $name, $postcode, $address );
     $replace_sth->finish();
@@ -139,14 +156,24 @@ SQL
     sub set_modtime
     {
         my $url = shift;
-        my $modtime = ( head( $url ) )[2];
-        warn "no modtime for $url\n" and return unless $modtime;
-        my $sql = "REPLACE INTO url ( url, modtime ) VALUES ( ?, ? )";
+        my $modtime = ( head( $url ) )[2] || 0;
+        my $sql = "REPLACE INTO url ( url, modtime, requested ) VALUES ( ?, ?, NOW() )";
         my $sth = $dbh->prepare( $sql );
         $sth->execute( $url, $modtime );
         $sth->finish;
     }
 
+    sub get_requested
+    {
+        my $url = shift;
+        my $sql = "SELECT requested FROM url WHERE url = ?";
+        my $sth = $dbh->prepare( $sql );
+        $sth->execute( $url );
+        my ( $requested ) = $sth->fetchrow;
+        $sth->finish;
+        return $requested;
+    }
+    
     sub get_modtime
     {
         my $url = shift;
@@ -168,7 +195,6 @@ SQL
         return if not defined $db_modtime;
         if ( $db_modtime == $http_modtime )
         {
-            warn "$url not changed ($db_modtime)\n";
             return 1;
         }
         return;
@@ -177,9 +203,10 @@ SQL
     sub update_report
     {
         my $error = shift;
+        my $type = shift;
         my $url = shift;
         my $name = shift;
-        my $description = $name ? "$name ($url)" : $url;
+        my $description = $name ? "$name ($type - $region)" : $url;
         if ( $error )
         {
             warn "FAILED: $description: $error\n";
@@ -187,268 +214,173 @@ SQL
         else
         {
             warn "SUCCESS: $description\n";
-            set_modtime( $url );
         }
         $result{$url} = $error;
     }
 
     sub print_report
     {
+        warn "ALL: ", scalar( keys %result ), "\n";
         warn "SUCCESSFUL: ", scalar( grep { ! $result{$_} } keys %result ), "\n";
         warn "FAILED: ", scalar( grep { $result{$_} } keys %result ), "\n";
     }
 }
 
-$update{ofsted} = sub {
-    warn "update ofsted ...\n";
-    init_report();
-    my $base = 'http://www.ofsted.gov.uk/reports/';
-    my @fields = qw( ofsted_school_id school_id ofsted_url lea_id region_id );
+sub get_name_and_url
+{
+    my $html = shift;
+    return unless $html;
+    my ( $url, $title, $name ) = $html =~ m{<a href="([^"]+)" title="([^"]+)">([^>]+)</a>};
+    return ( $name, $url );
+}
 
-    my $fields = join( ",", @fields );
-    my @placeholders = map "?", @fields;
-    my $placeholders = join( ",", @placeholders );
-    my $sth = $dbh->prepare( <<SQL );
-REPLACE INTO ofsted ( $fields ) VALUES ( $placeholders )
-SQL
-    my %re = (
-        region => qr/fuseaction=leaByRegion&id=(\d+)/,
-        lea => qr/fuseaction=lea&id=(\d+)/,
-        type => qr/fuseaction=listByLea&lea=\d+&type=(.*)/,
-        school => qr/fuseaction=summary&id=(\d+)/,
-        page => qr/page=(\d+)/,
+sub get_school_details
+{
+    my $html = shift;
+    my %school;
+    my $tree = HTML::TreeBuilder->new;
+    $tree->parse( $html );
+    my $node = $tree->elementify();
+    my ( $details ) = $node->look_down(
+        _tag => "dl", 
+        id => "details"
     );
-    for my $region ( get_links( get_html( $base ), $re{region} ) )
+    my @a = grep /\S/, map $_->as_text, $details->look_down(
+        _tag => "dd", 
+    );
+    my @address;
+    for ( @a )
     {
-        my ( $region_id ) = $region =~ $re{region};
-        if ( $opts{region} )
+        s/\xA0/ /; # nbsp
+        s/^\s*//;
+        s/\s*$//;
+        next unless /\S/;
+        if ( /([A-Z]+[0-9][0-9A-Z]*\s+[0-9][A-Z0-9]+)/msi )
         {
-            next unless $region_id eq $opts{region}
+            $school{postcode} = $1;
+            last;
         }
-        for my $lea ( get_links( get_html( $region ), $re{lea} ) )
+        else
         {
-            my ( $lea_id ) = $lea =~ $re{lea};
-            if ( $opts{lea} )
-            {
-                next unless $lea_id eq $opts{lea}
-            };
-            for my $type ( get_links( get_html( $lea ), $re{type} ) )
-            {
-                my ( $type_id ) = $type =~ $re{type};
-                next if $type_id eq 'independent';
-                my $page_no = 1;
-                while ( defined $page_no )
-                {
-                    SCHOOL: for my $school_url ( get_links( get_html( $type ), $re{school} ) )
-                    {
-                        my ( $html ) = get_html( $school_url );
-                        warn "can't get $school_url\n" and next SCHOOL unless $html;
-                        my ( $report_url ) = get_links( $html, $school_url, qr{/reports/.*\.(html?|pdf)$}, 1 );
-                        unless ( $report_url )
-                        {
-                            update_report( "can't find report", $school_url );
-                            next;
-                        }
-                        warn "report_url: $report_url\n";
-                        next SCHOOL if no_update( $report_url );
-                        my ( $name, $postcode );
-                        my ( $school_id ) = $school_url =~ $re{school};
-                        my %school;
-                        $school{ofsted_school_id} = $school_id;
-                        $school{region_id} = $region_id;
-                        $school{lea_id} = $lea_id;
-                        $school{ofsted_url} = $report_url;
-                        eval {
-                            my $address;
-                            for ( get_text_nodes( $html, _tag => "div", class => "pageIntro" ) )
-                            {
-                                if ( /How to find (.*)/i )
-                                {
-                                    $name = $1;
-                                }
-                                elsif ( /(.*) ([A-Z]+[0-9][0-9A-Z]*\s+[0-9][A-Z0-9]+)/msi )
-                                {
-                                    $address = $1;
-                                    $postcode = $2;
-                                }
-                            }
-                            die "no address" unless $address;
-                            $school{school_id} = create_school( $name, $postcode, $address );
-                            add_school_type( $school{school_id}, $type_id );
-                            die "no school_id" unless $school_id;
-                            $sth->execute( @school{@fields} );
-                        };
-                        update_report( $@, $school_url, $name );
-                    }
-                    my @pages = get_links( get_html( $type ), $re{page} );
-                    my $next;
-                    for my $page ( @pages )
-                    {
-                        my ( $no ) = $page =~ $re{page};
-                        if ( $no == $page_no+1 )
-                        {
-                            $next = $no;
-                            $type = $page;
-                        }
-                    }
-                    $page_no = $next;
-                }
-            }
+            push( @address, $_ );
         }
     }
-    print_report();
-};
+    die "no postcode\n" unless $school{postcode};
+    $school{address} = join( ", ", @address );
+    @school{qw( lat lon )} = 
+        $html =~ m{
+            hlat=([-\d\.]+);
+            .*?hlong=([-\d\.]+);
+        }six
+    ;
+    return %school;
+}
 
-$update{isi} = sub {
-    warn "update isi ...\n";
-    init_report();
-    my $base = 'http://www.isinspect.org.uk/isindex/alpha.htm';
-    my $re = qr{http://www.isinspect.org.uk/report/\d+.htm};
-    for my $school_url ( get_links( get_html( $base ), $re ) )
+sub process_school_row
+{
+    my $row = shift;
+    my $schools_url = shift;
+    my $year = shift;
+    my $type = shift;
+    my $type_name = shift;
+    my @cells = @{$row};
+    my ( $name, $url ) = get_name_and_url( $cells[0] );
+    return unless $name;
+    warn "no school url\n" and return unless $url;
+    my %school = ( year => $year, name => $name );
+    my $school_url = URI->new_abs( $url, $schools_url );
+    $school_url =~ s/\&amp;/&/g;
+    unless ( $opts{force} )
     {
-        my ( $name, %school, $report_url );
-        my ( $html ) = get_html( $school_url );
-        warn "can't get $school_url" and next unless $html;
-        ( $report_url ) = get_links( $html, $school_url, qr{http://www.isinspect.org.uk/reports/\d{4}/[\d_]+.htm} );
-        warn "no report URL on $school_url\n" and next unless $report_url;
-        next if no_update( $report_url );
-        eval {
-            $html =~ s/\s*<BR>\s*/\000/g;
-            ( $name ) = $html =~ m{<big>(.*?)</big>};
-            die "no name" unless $name;
-            $name =~ s/^\s*//;
-            $name =~ s/\s*$//;
-            %school = ( isi_url => $report_url );
-            my ( @keys, @vals );
-            my $tp = HTML::TableParser->new(
-                [
-                    {
-                        id => '1.1.2.1',
-                        hdr => sub { 
-                            @keys = map { s![\s/]+!_!g; $_ } map lc( $_ ), map { split( "\000", $_ ) } @{$_[2]};
-                        },
-                        row => sub { @school{@keys} = @vals = map { split( "\000", $_ ) } @{$_[2]} },
-                    },
-                ],
-                {
-                    Decode => 1,
-                    DecodeNBSP => 1,
-                    Chomp => 1,
-                    Trim => 1,
-                }
-            );
-            $tp->parse( $html );
-            my $postcode = delete $school{postcode};
-            my $address;
-            my ( $current_info ) = get_links( $html, $school_url, qr{http://www.isc.co.uk/index.php/\d+/\d+} );
-            if ( $current_info )
-            {
-                warn "current info url: $current_info\n";
-                my ( $cihtml ) = get_html( $current_info );
-                die "Can't get current info URL $current_info\n" unless $cihtml;
-                my ( $addr_str ) = $cihtml =~ m{<td class="schoolcontent">(.*?)</td>}si;
-                my @address = split( /\s*<br>\s*/, $addr_str );
-                s{<[^>]+>}{}g for @address;
-                @address = grep !/$postcode/i, @address;
-                if ( @address )
-                {
-                    $address = join( ", ", @address );
-                    warn "address: $address\n";
-                }
-                else
-                {
-                    warn "no address\n";
-                }
-
-            }
-            $school{school_id} = create_school( $name, $postcode, $address );
-            add_school_type( $school{school_id}, "independent" );
-            my $keys = join( ",", keys %school );
-            my $placeholders = join( ",", map "?", keys %school );
-            my $sql = " REPLACE INTO isi ( $keys ) VALUES ( $placeholders )";
-            my $sth = $dbh->prepare( $sql );
-            $sth->execute( values %school );
-        };
-        update_report( $@, $report_url, $name );
+        my $sql = <<SQL;
+SELECT * FROM dfes WHERE ${type_name}_url = ? AND year = ?
+SQL
+        my $select_sth = $dbh->prepare( $sql );
+        $select_sth->execute( $school_url, $year );
+        my @row = $select_sth->fetchrow;
+        if ( @row )
+        {
+            warn "$name ($type_name - $region - $year) ALREADY SEEN\n";
+            return;
+        }
+        else
+        {
+            warn "$name ($type_name - $region - $year) IS NEW\n";
+        }
     }
-    print_report();
-};
+    $school{url} = $school_url;
+    return if no_update( $school{url} );
+    eval {
+        my $no_pupils = $cells[$type->{indexes}{no_pupils}];
+        die "no no_pupils\n" unless $no_pupils;
+        $school{no_pupils} = $no_pupils;
+        my $aps = $cells[$type->{indexes}{aps}];
+        die "no aps\n" unless $aps;
+        $school{aps} = $aps;
+        my ( $school_html ) = get_html( $school_url );
+        %school = ( %school, get_school_details( $school_html ) );
+        $school{school_id} = create_school( 
+            @school{qw(name postcode address lat lon)}
+        );
+        add_school_type( $school{school_id}, $type->{type} );
+        $type->{replace_sth}->execute( 
+            @school{qw(school_id year no_pupils aps url)}
+        );
+    };
+    update_report( $@, $type_name, $school{url}, $school{name} );
+}
 
-$update{dfes} = sub {
+sub follow_links
+{
+    my $url = shift or die "no url\n";
+    my $callback = shift;
+    my @re = @_;
+
+    if ( @re )
+    {
+        my $re = shift @re;
+        for my $link ( get_links( get_html( $url, 1 ), $re ) )
+        {
+            $link =~ s/\&L=\d+/\&L=1000/;
+            if ( $link =~ /(region\d+)/ )
+            {
+                $region = $1;
+                warn "region: $region\n";
+            }
+            follow_links( $link, $callback, @re );
+        }
+    }
+    else
+    {
+        $callback->( $url );
+    }
+}
+
+sub update
+{
     warn "update dfes ...\n";
     init_report();
-    my @generic_keys = qw( region lea );
-    my %keys = (
-        post16 => [ qw(
-            pupils_post16 
-            average_post16 
-            post16_url
-        ) ],
-        ks3 => [ qw(
-            pupils_ks3 
-            average_ks3 
-            ks3_url
-        ) ],
-        primary => [ qw(
-            pupils_primary
-            average_primary
-            primary_url
-        ) ],
-        secondary => [ qw(
-            pupils_secondary
-            average_secondary
-            secondary_url
-        ) ]
-    );
-    my %indexes = (
-        2005 => {
-            primary => [0,15],
-            ks3 => [0,11],
-            secondary => [0,10],
-            post16 => [0,2],
-        },
-        2004 => {
-            primary => [0,14],
-            ks3 => [0,12],
-            secondary => [0,8],
-            post16 => [0,3],
-        },
-        2003 => {
-            primary => [0,14],
-            ks3 => [0,12],
-            secondary => [0,8],
-            post16 => [0,3],
-        },
+    my %re = (
+        2007 => [
+            qr{/performancetables/.*/(?:region|lsc)(\d+).shtml},
+            qr{/performancetables/group_07.pl\?Mode=[A-Z]+&Type=[A-Z]+&No=\d+&Base=[a-z]&F=\d+&L=\d+&Year=\d+&Phase=},
+        ],
     );
     my %types = (
-        post16 => "post16",
-        primary => "primary",
-        ks3 => "secondary",
-        secondary => "secondary",
+        post16 => { type => "post16", indexes => { no_pupils => 1, aps => 3 } },
+        primary => { type => "primary", indexes => { no_pupils => 1, aps => 15 } },
+        ks3 => { type => "secondary", },
+        secondary => { type => "secondary", indexes => { no_pupils => 1, aps => 4 }, },
     );
     my $base = 'http://www.dfes.gov.uk/performancetables/';
-    my %re = (
-        regions => qr{/performancetables/.*/(?:regions|lscs).shtml},
-        region => qr{/performancetables/.*/(?:region|lsc)(\d+).shtml},
-        lea => qr{/performancetables/.*\?Mode=Z&No(?:Lea)?=(\d+)},
-    );
-    my @years = $opts{year} ? ( $opts{year} ) : keys %indexes;
+    my @years = $opts{year} ? ( $opts{year} ) : keys %re;
     warn "getting data for @years\n";
-    my $pm = Parallel::ForkManager->new( scalar( @years ) );
-    $pm->run_on_start( sub { warn "start process: @_\n" } );
-    $pm->run_on_finish( sub { warn "finish process: @_\n" } );
     $dbh->disconnect();
     for my $year ( @years )
     {
-        my $pid = $pm->start( $year );
-        if ( $pid )
-        {
-            warn "child process $pid forked for $year\n";
-            next;
-        }
         $dbh = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
         $geo = Geo::Multimap->new();
-        my $logfile = "$Bin/logs/update.$opts{source}.$year.log";
+        my $logfile = "$Bin/logs/update.$year.log";
         open( STDERR, ">$logfile" ) or die "can't write to $logfile\n" unless $opts{verbose};
         my $y;
         if ( $year =~ /(\d\d)$/ )
@@ -459,144 +391,54 @@ $update{dfes} = sub {
         {
             die "year $year is incorrect format\n";
         }
+        my @types = qw( primary secondary ks3 post16 );
         my %type_link = (
             primary => "http://www.dfes.gov.uk/performancetables/primary_$y.shtml",
             secondary => "http://www.dfes.gov.uk/performancetables/schools_$y.shtml",
             post16 => "http://www.dfes.gov.uk/performancetables/16to18_$y.shtml",
             ks3 => "http://www.dfes.gov.uk/performancetables/ks3_$y.shtml",
         );
-        my @types = keys %keys;
-        if ( $opts{type} )
-        {
-            die "$opts{type} is not a valid type (", join( ",", keys %keys ), ")\n" unless $keys{$opts{type}};
-            @types = ( $opts{type} );
-        }
+        @types = $opts{type} ?  ( $opts{type} ) : @types;
         for my $type ( @types )
         {
             my $type_link = $type_link{$type};
-            my @keys = ( @generic_keys, @{$keys{$type}} );
-            my $select_sth = $dbh->prepare( <<SQL );
-SELECT school_id FROM dfes WHERE school_id = ? AND year = ?
-SQL
-            my $update_sql = 
-                "UPDATE dfes SET " . 
-                join( ",", map( "$_ = ?", @keys ) ) .
-                " WHERE school_id = ? AND year = ?"
-            ;
-            my $update_sth = $dbh->prepare( $update_sql );
-            my $insert_sql = 
-                "INSERT INTO dfes (" . 
+            my @keys = (
+                "pupils_$type",
+                "average_$type",
+                "${type}_url",
+            );
+            my $replace_sql = 
+                "REPLACE INTO dfes (" . 
                 join( ",", 'school_id', 'year', @keys ) . ") " .
                 "VALUES (" . join( ",", map "?", 'school_id', 'year', @keys ) . ")"
             ;
-            my $insert_sth = $dbh->prepare( $insert_sql );
-            my $tcp = HTML::TableContentParser->new();
-            for my $regions_link ( get_links( get_html( $type_link ), $re{regions} ) )
-            {
-                for my $region_link ( get_links( get_html( $regions_link ), $re{region} ) )
+            $types{$type}{replace_sth} = $dbh->prepare( $replace_sql );
+            my $callback = sub {
+                my $url = shift;
+                warn "GET SCHOOLS TABLE\n";
+                my ( $html ) = get_html( $url, 1 );
+                return unless $html;
+                my $te = HTML::TableExtract->new( keep_html => 1 );
+                $te->parse( $html );
+                my ( $table ) = $te->tables;
+                if ( $table )
                 {
-                    my ( $region ) = $region_link =~ $re{region};
-                    for my $lea_link ( get_links( get_html( $region_link ), $re{lea} ) )
+                    for my $row ( $table->rows )
                     {
-                        warn "LEA: $lea_link\n";
-                        my ( $lea ) = $lea_link =~ $re{lea};
-                        my ( $html ) = get_html( $lea_link );
-                        warn "get $lea_link failed" and next unless $html;
-                        my $tables = $tcp->parse( $html );
-                        for my $t ( @$tables ) 
-                        {
-                            ROW: for my $r (@{$t->{rows}}) 
-                            {
-                                my @cells = map $_->{data}, @{$r->{cells}};
-                                my %school = (
-                                    region => $region,
-                                    lea => $lea,
-                                );
-                                next ROW unless my $name_cell = shift @cells;
-                                my ( $url, $name, $postcode );
-                                next ROW unless ( $url, $name ) = $name_cell =~ /href=\"([^"]+)"[^>]+title=\"([^"]+)"/;
-                                warn "name: $name\n";
-                                my $school_url = URI->new_abs( $url, $lea_link );
-                                $school_url =~ s/\&amp;/&/g;
-                                next ROW if no_update( $school_url );
-                                my @indexes = @{$indexes{$year}{$type}};
-                                my @data = @cells[@indexes];
-                                eval {
-                                    for ( @data )
-                                    {
-                                        unless ( defined $_ && /^[\d.]+\%?$/ )
-                                        {
-                                            die "can't parse data\n";
-                                            next ROW;
-                                        }
-                                        s/%$//;
-                                    }
-                                    warn "data: @data\n";
-                                    my ( $school_html ) = get_html( $school_url );
-                                    my $address;
-                                    die "get $school_url failed\n" unless $school_html;
-                                    ( $address ) = $school_html =~ m{
-                                        <h3>[^<]+</h3>
-                                        (.*?)
-                                        (?:<p>|<br\s*/><br\s*/>)
-                                    }six;
-                                    die "no address" unless $address;
-                                    $address =~ s/^\s*//;
-                                    $address =~ s/\s*$//;
-                                    my @a = split( /\s*<br\s*\/>\s*/, $address );
-                                    my @address;
-                                    for ( @a )
-                                    {
-                                        if ( /([A-Z]+[0-9][0-9A-Z]*\s+[0-9][A-Z0-9]+)/msi )
-                                        {
-                                            $postcode = $1;
-                                        }
-                                        else
-                                        {
-                                            push( @address, $_ );
-                                        }
-                                    }
-                                    $address = join( ", ", @address );
-                                    $school{school_id} = create_school( $name, $postcode, $address );
-                                    add_school_type( $school{school_id}, $types{$type} );
-                                    $select_sth->execute( $school{school_id}, $year );
-                                    if ( $select_sth->fetchrow )
-                                    {
-                                        warn "$school{school_id},$year already exists\n";
-                                        $update_sth->execute( 
-                                            @school{@generic_keys}, 
-                                            @data, 
-                                            $school_url,
-                                            $school{school_id},
-                                            $year,
-                                        );
-                                    }
-                                    else
-                                    {
-                                        warn "$school{school_id},$year is new\n";
-                                        $insert_sth->execute( 
-                                            $school{school_id},
-                                            $year,
-                                            @school{@generic_keys}, 
-                                            @data,
-                                            $school_url,
-                                        );
-                                    }
-                                };
-                                update_report( $@, $school_url, $name );
-                            }
-                        }
+                        process_school_row( $row, $url, $year, $types{$type}, $type );
                     }
                 }
-            }
+                else
+                {
+                    warn "can't find able in $url\n";
+                }
+            };
+            follow_links( $type_link, $callback, @{$re{$year}} );
         }
         $dbh->disconnect();
-        $pm->finish;
+        print_report();
     }
-    warn "Wait for children to finish ...\n";
-    $pm->wait_all_children();
     warn "all done\n";
-    print_report();
     warn "update dfes finished\n";
 };
 
@@ -624,51 +466,16 @@ if ( $opts{flush} )
     }
     $dbh->disconnect();
     exit;
+update
 }
 
-if ( $opts{source} )
-{
-    my $logfile = "$Bin/logs/update.$opts{source}.log";
-    open( STDERR, ">$logfile" ) or die "can't write to $logfile\n" unless $opts{verbose};
-    print STDERR "$0 ($$) at ", scalar( localtime ), "\n";
-    $dbh = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
-    $geo = Geo::Multimap->new();
-    warn "update $opts{source}\n";
-    die "no update code for $opts{source} ($update{$opts{source}})\n" unless ref( $update{$opts{source}} ) eq 'CODE';
-    $update{$opts{source}}->();
-    $dbh->disconnect();
-}
-else
-{
-    open( STDERR, ">$Bin/logs/update.log" ) unless $opts{verbose};
-    print STDERR "$0 ($$) at ", scalar( localtime ), "\n";
-
-    my $pm = Parallel::ForkManager->new( scalar( @sources ) );
-    $pm->run_on_start( sub { warn "start process: @_\n" } );
-    $pm->run_on_finish( sub { warn "finish process: @_\n" } );
-    for my $source ( @sources )
-    {
-        my $pid = $pm->start( $source );
-        if ( $pid )
-        {
-            warn "child process $pid forked for $source\n";
-            next;
-        }
-        my $logfile = "$Bin/logs/update.$source.log";
-        warn "open logfile $logfile\n";
-        open( STDERR, ">$logfile" ) or die "can't write to $logfile\n" unless $opts{verbose};
-        print STDERR "$0 ($$) at ", scalar( localtime ), "\n";
-        $dbh = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
-        $geo = Geo::Multimap->new();
-        $update{$source}->();
-        $dbh->disconnect();
-        $pm->finish;
-    }
-    warn "Wait for children to finish ...\n";
-    $pm->wait_all_children();
-    warn "all done\n";
-}
-
+my $logfile = "$Bin/logs/update.log";
+open( STDERR, ">$logfile" ) or die "can't write to $logfile\n" unless $opts{verbose};
+print STDERR "$0 ($$) at ", scalar( localtime ), "\n";
+$dbh = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
+$geo = Geo::Multimap->new();
+update();
+$dbh->disconnect();
 warn "$0 ($$) finished\n";
 
 #------------------------------------------------------------------------------

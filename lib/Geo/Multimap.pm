@@ -132,7 +132,7 @@ sub find
     }
     unless ( defined( $lat ) && defined( $lon ) && defined( $x ) && defined( $y ) )
     {
-        warn "can't get coords for $postcode from $url ($lat, $lon, $x, $y)\n";
+        warn "can't get coords for $postcode from $url\n";
         return;
     }
     warn "found coords $lat,$lon for $postcode from $url\n";

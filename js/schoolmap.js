@@ -10,8 +10,9 @@ var postcodePt;
 var postcode_url = "cgi/postcode.cgi";
 var postcodes_url = "cgi/postcodes.cgi";
 var cgi_url = "cgi/schools.cgi";
-var modperl_url = "schools";
-var schools_url = "schools.xml";
+var modperl_url = "schools.xml";
+var schools_url = modperl_url;
+// var schools_url = cgi_url;
 var school_url = "school";
 var nearby_url = "http://www.nearby.org.uk/coord.cgi?p=";
 var ononemap_url = "http://ononemap.com/map/?q=";
@@ -136,7 +137,7 @@ function removeChildren( parent )
     try {
         while ( parent.childNodes.length ) parent.removeChild( parent.childNodes[0] );
     }
-    catch(e) { YAHOO.log( e ) }
+    catch(e) { console.log( e ) }
 }
 
 function childReplace( parent, node )
@@ -191,33 +192,34 @@ function initSourcesCallback( response )
         addOpt( document.forms[0].source, "All", "all" );
         document.forms[0].source.value = "all";
         if ( params.source ) document.forms[0].source.value = params.source;
-        initYears();
-    }
-    catch(e) { alert( e ) }
-}
-
-function initYears()
-{
-    url = schools_url + "?years";
-    get( url, initYearsCallback );
-}
-
-function initYearsCallback( response )
-{
-    try {
-        var xmlDoc = response.responseXML;
-        var yearsXml = xmlDoc.documentElement.getElementsByTagName( "year" );
-        removeChildren( document.forms[0].year );
-        for ( var i = 0; i < yearsXml.length; i++ )
-        {
-            var year = xml2obj( yearsXml[i] );
-            addOpt( document.forms[0].year, year.year, year.year );
-        }
-        if ( params.year ) document.forms[0].year.value = params.year;
+        // initYears();
         initKeystages();
     }
     catch(e) { alert( e ) }
 }
+
+// function initYears()
+// {
+    // url = schools_url + "?years";
+    // get( url, initYearsCallback );
+// }
+// 
+// function initYearsCallback( response )
+// {
+    // try {
+        // var xmlDoc = response.responseXML;
+        // var yearsXml = xmlDoc.documentElement.getElementsByTagName( "year" );
+        // removeChildren( document.forms[0].year );
+        // for ( var i = 0; i < yearsXml.length; i++ )
+        // {
+            // var year = xml2obj( yearsXml[i] );
+            // addOpt( document.forms[0].year, year.year, year.year );
+        // }
+        // if ( params.year ) document.forms[0].year.value = params.year;
+        // initKeystages();
+    // }
+    // catch(e) { alert( e ) }
+// }
 
 function initKeystages()
 {
@@ -364,14 +366,14 @@ function get( url, callback )
 {
     var callbacks = {
         success:function(o) {
-            // YAHOO.log( "GOT " + current_url );
-            // YAHOO.log( o.responseText );
+            console.log( "GOT " + current_url );
+            console.log( o.responseText );
             setCursor( "default" );
             callback( o );
         },
         failure:function(o) { 
             setCursor( "default" );
-            YAHOO.log( "GET " + current_url + " failed:" + o.statusText ) 
+            console.log( "GET " + current_url + " failed:" + o.statusText ) 
         }
     };
     current_url = url;
@@ -379,11 +381,11 @@ function get( url, callback )
     {
         if ( YAHOO.util.Connect.isCallInProgress( transaction ) )
         {
-            YAHOO.log( "abort " + transaction );
+            console.log( "abort " + transaction );
             YAHOO.util.Connect.abort( transaction );
         }
     }
-    // YAHOO.log( "GET " + url );
+    // console.log( "GET " + url );
     setCursor( "wait" );
     transaction = YAHOO.util.Connect.asyncRequest( 'GET', url, callbacks );
 }
@@ -531,7 +533,7 @@ function createSchoolMarker( school, colour )
         marker.school = school;
         school.marker = marker;
     }
-    catch(e) { YAHOO.log( e ) }
+    catch(e) { console.log( e ) }
 }
 
 
@@ -556,7 +558,7 @@ function setOrderBy()
         }
         if ( curr ) document.forms[0].order_by.value = curr;
     }
-    catch(e) { YAHOO.log( e ) }
+    catch(e) { console.log( e ) }
 }
 
 function initTableHead( tr )
@@ -718,8 +720,8 @@ function createListRow( no, school )
                 school_url + "/" +
                 school.school_id + 
                 "?source=dfes" +
-                "&type=" + keystage.name +
-                "&year=" + year
+                "&year=" + year +
+                "&type=" + keystage.name
             ;
         }
         var td = createListTd( val, url, school );

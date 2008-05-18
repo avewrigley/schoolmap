@@ -19,10 +19,10 @@
     <!-- Source file --> 
     <script type="text/javascript" src="/js/yui/build/logger/logger.js"></script> 
     <script type="text/javascript" src="/js/yui/build/autocomplete/autocomplete.js"></script> 
-    <!--
     <script src="http://www.openlayers.org/api/OpenLayers.js" type="text/javascript"></script>
-    -->
+    <!--
     <script src="js/OpenLayers-2.1/lib/OpenLayers.js" type="text/javascript"></script>
+    -->
     <link rel="stylesheet" href="/css/schoolmap.css" type="text/css" media="screen" />
 </head>
 <body onload="initMap()">
@@ -48,8 +48,11 @@
 <td align="right">
     <div class="controls" >
     <b>source:</b><select name="source" onchange="initTypes()"><option /></select>
+    <!--
     <b>year:</b>
     <select name="year" onchange="getSchools()"><option /></select>
+    -->
+    <input name="year" type="hidden" value="2007" />
     <b>type:</b> <select name="type" onchange="getSchools()"><option /></select>
     <b>no. schools:</b>
     <select name="limit" onchange="getSchools()">
