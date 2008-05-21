@@ -107,6 +107,7 @@ SELECT DISTINCT type
     WHERE $self->{source}.school_id = school_type.school_id
 EOF
     }
+    warn "$sql\n";
     my $sth = $self->{dbh}->prepare( $sql );
     $sth->execute();
     print "<types>";
@@ -129,6 +130,7 @@ sub years
     my $self = shift;
     my $sql = "SELECT DISTINCT year FROM dfes ORDER BY year DESC";
     my $sth = $self->{dbh}->prepare( $sql );
+    warn "$sql\n";
     $sth->execute();
     my $years = $sth->fetchall_arrayref( {} );
     $sth->finish();
@@ -156,6 +158,7 @@ sub sources_xml
 {
     my $self = shift;
     my $sql = "SELECT * from source";
+    warn "$sql\n";
     my $sth = $self->{dbh}->prepare( $sql );
     $sth->execute();
     my $sources = $sth->fetchall_arrayref( {} );
@@ -167,6 +170,7 @@ sub keystages_xml
 {
     my $self = shift;
     my $sql = "SELECT * from keystage ORDER BY age";
+    warn "$sql\n";
     my $sth = $self->{dbh}->prepare( $sql );
     $sth->execute();
     my $keystages = $sth->fetchall_arrayref( {} );

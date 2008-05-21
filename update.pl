@@ -31,7 +31,8 @@ use Data::Dumper;
 use CGI::Lite;
 
 my %opts;
-my @opts = qw( flush year=s type=s force silent pidfile! verbose );
+my @opts = qw( flush type=s force silent pidfile! verbose );
+my $year = "2007";
 my $region;
 my $geo;
 my $dbh;
@@ -245,6 +246,10 @@ sub get_school_details
         _tag => "dl", 
         id => "details"
     );
+    unless ( $details )
+    {
+        die "no details DL\n";
+    }
     my @a = grep /\S/, map $_->as_text, $details->look_down(
         _tag => "dd", 
     );
@@ -280,7 +285,6 @@ sub process_school_row
 {
     my $row = shift;
     my $schools_url = shift;
-    my $year = shift;
     my $type = shift;
     my $type_name = shift;
     my @cells = @{$row};
@@ -290,23 +294,20 @@ sub process_school_row
     my %school = ( year => $year, name => $name );
     my $school_url = URI->new_abs( $url, $schools_url );
     $school_url =~ s/\&amp;/&/g;
-    unless ( $opts{force} )
-    {
-        my $sql = <<SQL;
+    my $sql = <<SQL;
 SELECT * FROM dfes WHERE ${type_name}_url = ? AND year = ?
 SQL
-        my $select_sth = $dbh->prepare( $sql );
-        $select_sth->execute( $school_url, $year );
-        my @row = $select_sth->fetchrow;
-        if ( @row )
-        {
-            warn "$name ($type_name - $region - $year) ALREADY SEEN\n";
-            return;
-        }
-        else
-        {
-            warn "$name ($type_name - $region - $year) IS NEW\n";
-        }
+    my $select_sth = $dbh->prepare( $sql );
+    $select_sth->execute( $school_url, $year );
+    my @row = $select_sth->fetchrow;
+    if ( @row )
+    {
+        # warn "$school_url $name ($type_name - $region ) ALREADY SEEN\n";
+        return;
+    }
+    else
+    {
+        warn "$school_url $name ($type_name - $region ) IS NEW\n";
     }
     $school{url} = $school_url;
     return if no_update( $school{url} );
@@ -315,9 +316,9 @@ SQL
         die "no no_pupils\n" unless $no_pupils;
         $school{no_pupils} = $no_pupils;
         my $aps = $cells[$type->{indexes}{aps}];
-        die "no aps\n" unless $aps;
-        $school{aps} = $aps;
+        $school{aps} = $aps || 0;
         my ( $school_html ) = get_html( $school_url );
+        die "no HTML for $school_url\n" unless $school_html;
         %school = ( %school, get_school_details( $school_html ) );
         $school{school_id} = create_school( 
             @school{qw(name postcode address lat lon)}
@@ -341,6 +342,7 @@ sub follow_links
         my $re = shift @re;
         for my $link ( get_links( get_html( $url, 1 ), $re ) )
         {
+            # this avoids paging of schools table ...
             $link =~ s/\&L=\d+/\&L=1000/;
             if ( $link =~ /(region\d+)/ )
             {
@@ -360,11 +362,9 @@ sub update
 {
     warn "update dfes ...\n";
     init_report();
-    my %re = (
-        2007 => [
-            qr{/performancetables/.*/(?:region|lsc)(\d+).shtml},
-            qr{/performancetables/group_07.pl\?Mode=[A-Z]+&Type=[A-Z]+&No=\d+&Base=[a-z]&F=\d+&L=\d+&Year=\d+&Phase=},
-        ],
+    my @re = (
+        qr{/performancetables/.*/(?:region|lsc)(\d+).shtml},
+        qr{/performancetables/group_07.pl\?Mode=[A-Z]+&Type=[A-Z]+&No=\d+&Base=[a-z]&F=\d+&L=\d+&Year=\d+&Phase=},
     );
     my %types = (
         post16 => { type => "post16", indexes => { no_pupils => 1, aps => 3 } },
@@ -373,71 +373,55 @@ sub update
         secondary => { type => "secondary", indexes => { no_pupils => 1, aps => 4 }, },
     );
     my $base = 'http://www.dfes.gov.uk/performancetables/';
-    my @years = $opts{year} ? ( $opts{year} ) : keys %re;
-    warn "getting data for @years\n";
     $dbh->disconnect();
-    for my $year ( @years )
+    $dbh = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
+    $geo = Geo::Multimap->new();
+    my ( $y ) = $year =~ /^\d\d(\d\d)$/;
+    my @types = qw( primary secondary ks3 post16 );
+    my %type_link = (
+        primary => "http://www.dfes.gov.uk/performancetables/primary_$y.shtml",
+        secondary => "http://www.dfes.gov.uk/performancetables/schools_$y.shtml",
+        post16 => "http://www.dfes.gov.uk/performancetables/16to18_$y.shtml",
+        ks3 => "http://www.dfes.gov.uk/performancetables/ks3_$y.shtml",
+    );
+    @types = $opts{type} ?  ( $opts{type} ) : @types;
+    for my $type ( @types )
     {
-        $dbh = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
-        $geo = Geo::Multimap->new();
-        my $logfile = "$Bin/logs/update.$year.log";
-        open( STDERR, ">$logfile" ) or die "can't write to $logfile\n" unless $opts{verbose};
-        my $y;
-        if ( $year =~ /(\d\d)$/ )
-        {
-            $y = $1;
-        }
-        else
-        {
-            die "year $year is incorrect format\n";
-        }
-        my @types = qw( primary secondary ks3 post16 );
-        my %type_link = (
-            primary => "http://www.dfes.gov.uk/performancetables/primary_$y.shtml",
-            secondary => "http://www.dfes.gov.uk/performancetables/schools_$y.shtml",
-            post16 => "http://www.dfes.gov.uk/performancetables/16to18_$y.shtml",
-            ks3 => "http://www.dfes.gov.uk/performancetables/ks3_$y.shtml",
+        my $type_link = $type_link{$type};
+        my @keys = (
+            "pupils_$type",
+            "average_$type",
+            "${type}_url",
         );
-        @types = $opts{type} ?  ( $opts{type} ) : @types;
-        for my $type ( @types )
-        {
-            my $type_link = $type_link{$type};
-            my @keys = (
-                "pupils_$type",
-                "average_$type",
-                "${type}_url",
-            );
-            my $replace_sql = 
-                "REPLACE INTO dfes (" . 
-                join( ",", 'school_id', 'year', @keys ) . ") " .
-                "VALUES (" . join( ",", map "?", 'school_id', 'year', @keys ) . ")"
-            ;
-            $types{$type}{replace_sth} = $dbh->prepare( $replace_sql );
-            my $callback = sub {
-                my $url = shift;
-                warn "GET SCHOOLS TABLE\n";
-                my ( $html ) = get_html( $url, 1 );
-                return unless $html;
-                my $te = HTML::TableExtract->new( keep_html => 1 );
-                $te->parse( $html );
-                my ( $table ) = $te->tables;
-                if ( $table )
+        my $replace_sql = 
+            "REPLACE INTO dfes (" . 
+            join( ",", 'school_id', 'year', @keys ) . ") " .
+            "VALUES (" . join( ",", map "?", 'school_id', 'year', @keys ) . ")"
+        ;
+        $types{$type}{replace_sth} = $dbh->prepare( $replace_sql );
+        my $callback = sub {
+            my $url = shift;
+            my ( $html ) = get_html( $url, 1 );
+            return unless $html;
+            my $te = HTML::TableExtract->new( keep_html => 1 );
+            $te->parse( $html );
+            my ( $table ) = $te->tables;
+            if ( $table )
+            {
+                for my $row ( $table->rows )
                 {
-                    for my $row ( $table->rows )
-                    {
-                        process_school_row( $row, $url, $year, $types{$type}, $type );
-                    }
+                    process_school_row( $row, $url, $types{$type}, $type );
                 }
-                else
-                {
-                    warn "can't find able in $url\n";
-                }
-            };
-            follow_links( $type_link, $callback, @{$re{$year}} );
-        }
-        $dbh->disconnect();
-        print_report();
+            }
+            else
+            {
+                warn "can't find able in $url\n";
+            }
+        };
+        follow_links( $type_link, $callback, @re );
     }
+    $dbh->disconnect();
+    print_report();
     warn "all done\n";
     warn "update dfes finished\n";
 };
@@ -446,10 +430,6 @@ sub update
 
 $opts{pidfile} = 1;
 GetOptions( \%opts, @opts ) or pod2usage( verbose => 0 );
-if ( $opts{year} )
-{
-    die "year $opts{year} is not valid\n" unless $opts{year} =~ /^\w{4}$/;
-}
 my $pp;
 if ( $opts{pidfile} )
 {
@@ -470,7 +450,10 @@ update
 }
 
 my $logfile = "$Bin/logs/update.log";
-open( STDERR, ">$logfile" ) or die "can't write to $logfile\n" unless $opts{verbose};
+unless ( $opts{verbose} )
+{
+    open( STDERR, ">>$logfile" ) or die "can't write to $logfile\n";
+}
 print STDERR "$0 ($$) at ", scalar( localtime ), "\n";
 $dbh = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
 $geo = Geo::Multimap->new();

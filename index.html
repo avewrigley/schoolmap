@@ -47,13 +47,19 @@
 </td>
 <td align="right">
     <div class="controls" >
-    <b>source:</b><select name="source" onchange="initTypes()"><option /></select>
-    <!--
-    <b>year:</b>
-    <select name="year" onchange="getSchools()"><option /></select>
-    -->
+    <input name="source" type="hidden" value="all" />
     <input name="year" type="hidden" value="2007" />
-    <b>type:</b> <select name="type" onchange="getSchools()"><option /></select>
+    <b>type:</b>
+    <select name="type" onchange="getSchools()">
+        <option value="post16">Sixteen Plus</option>
+        <option value="secondary">Secondary</option>
+        <option value="nursery">Nursery</option>
+        <option value="independent">Independent</option>
+        <option value="primary">Primary</option>
+        <option value="sen">Special School</option>
+        <option value="pru">Pupil Referral Unit</option>
+        <option value="all">All</option>
+    </select>
     <b>no. schools:</b>
     <select name="limit" onchange="getSchools()">
         <option value="1">1</option>
@@ -68,7 +74,13 @@
         <option value="45">45</option>
         <option value="50">50</option>
     </select>
-    <b>order by:</b> <select name="order_by" onchange="getSchools()"><option /></select>
+    <b>order by:</b>
+    <select name="order_by" onchange="getSchools()">
+        <option value="primary">Key stage 2 results</option>
+        <option value="ks3">Key stage 3 results</option>
+        <option value="secondary">GCSE results</option>
+        <option value="post16">GCE and VCE results</option>
+    </select>
     </div>
 </td>
 </tr></table>
