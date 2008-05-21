@@ -26,7 +26,6 @@ var schools;
 var noRedraw = false;
 var params = new Object();
 var keystages = new Array();
-var keystage2str = new Object();
 var source2str = new Object();
 var type2str = new Object();
 
@@ -164,118 +163,6 @@ function getOptions( sel )
     return options;
 }
 
-function initSources()
-{
-    var source = document.forms[0].source.value;
-    url = schools_url + "?sources";
-    get( url, initSourcesCallback );
-}
-
-function initSourcesCallback( response )
-{
-    try {
-        var xmlDoc = response.responseXML;
-        var sourcesXml = xmlDoc.documentElement.getElementsByTagName( "source" );
-        var sources = new Array();
-        for ( var i = 0; i < sourcesXml.length; i++ )
-        {
-            var source = xml2obj( sourcesXml[i] );
-            sources.push( source );
-        }
-        removeChildren( document.forms[0].source );
-        for ( var i = 0; i < sources.length; i++ )
-        {
-            var source = sources[i];
-            addOpt( document.forms[0].source, source.description, source.name );
-            source2str[source.name] = source.description;
-        }
-        addOpt( document.forms[0].source, "All", "all" );
-        document.forms[0].source.value = "all";
-        if ( params.source ) document.forms[0].source.value = params.source;
-        // initYears();
-        initKeystages();
-    }
-    catch(e) { alert( e ) }
-}
-
-// function initYears()
-// {
-    // url = schools_url + "?years";
-    // get( url, initYearsCallback );
-// }
-// 
-// function initYearsCallback( response )
-// {
-    // try {
-        // var xmlDoc = response.responseXML;
-        // var yearsXml = xmlDoc.documentElement.getElementsByTagName( "year" );
-        // removeChildren( document.forms[0].year );
-        // for ( var i = 0; i < yearsXml.length; i++ )
-        // {
-            // var year = xml2obj( yearsXml[i] );
-            // addOpt( document.forms[0].year, year.year, year.year );
-        // }
-        // if ( params.year ) document.forms[0].year.value = params.year;
-        // initKeystages();
-    // }
-    // catch(e) { alert( e ) }
-// }
-
-function initKeystages()
-{
-    url = schools_url + "?keystages";
-    get( url, initKeystagesCallback );
-}
-
-function initKeystagesCallback( response )
-{
-    try {
-        var xmlDoc = response.responseXML;
-        var keystagesXml = xmlDoc.documentElement.getElementsByTagName( "keystage" );
-        for ( var i = 0; i < keystagesXml.length; i++ )
-        {
-            var keystage = xml2obj( keystagesXml[i] );
-            keystages.push( keystage );
-            keystage2str[keystage.name] = keystage.description;
-        }
-        initTypes();
-    }
-    catch(e) { alert( e ) }
-}
-
-function initTypes()
-{
-    var source = document.forms[0].source.value;
-    url = schools_url + "?types&source=" + source;
-    get( url, initTypesCallback );
-}
-
-function initTypesCallback( response )
-{
-    try {
-        var xmlDoc = response.responseXML;
-        var typesXml = xmlDoc.documentElement.getElementsByTagName( "type" );
-        var types = new Array();
-        for ( var i = 0; i < typesXml.length; i++ )
-        {
-            var type = xml2obj( typesXml[i] );
-            types.push( type );
-        }
-        removeChildren( document.forms[0].type );
-        for ( var i = 0; i < types.length; i++ )
-        {
-            var type = types[i];
-            addOpt( document.forms[0].type, type.label, type.name );
-            type2str[type.name] = type.label;
-        }
-        addOpt( document.forms[0].type, "All", "all" );
-        document.forms[0].type.value = "all";
-        if ( params.type ) document.forms[0].type.value = params.type;
-        if ( document.forms[0].postcode.value ) getPostcode();
-        else getSchools();
-    }
-    catch(e) { alert( e ) }
-}
 function markersOffScreen()
 {
     for ( var i = 0; i < markersLayer.markers.length; i++ )
@@ -420,7 +307,7 @@ function getSchools()
     }
     else
     {
-        status = status + "(ordered by " + keystage2str[order_by] + ")";
+        status = status + "(ordered by " + order_by + ")";
     }
     var year = document.forms[0].year.value;
     status = status + " for " + year;
@@ -536,6 +423,12 @@ function createSchoolMarker( school, colour )
     catch(e) { console.log( e ) }
 }
 
+var keystages = new Array(
+    { "name":"primary", "description":"Key stage 2" },
+    { "name":"ks3", "description":"Key stage 3" },
+    { "name":"secondary", "description":"GCSE" },
+    { "name":"post16", "description":"GCE and VCE" }
+);
 
 function setOrderBy()
 {
@@ -567,7 +460,6 @@ function initTableHead( tr )
     createHeadCell( tr, "no" );
     createHeadCell( tr, "name", "Name of school" );
     createHeadCell( tr, "ofsted report", "link to Ofsted report" );
-    createHeadCell( tr, "isi report", "link to Independent Schools Inspectorate report" );
     for ( var i = 0; i < keystages.length; i++ ) 
         createHeadCell( tr, keystages[i].description, "average score" );
     ;
@@ -647,7 +539,8 @@ function initMap()
     map.events.register( "moveend", map, getSchools );
     if ( params.postcode ) document.forms[0].postcode.value = params.postcode;
     if ( params.limit ) document.forms[0].limit.value = params.limit;
-    initSources();
+    setOrderBy();
+    getSchools();
 }
 
 function createListTd( text, url, school )
@@ -698,14 +591,6 @@ function createListRow( no, school )
         url = school_url + "/" + school.school_id + "?source=ofsted";
     }
     tr.appendChild( createListTd( ofsted, url, school ) );
-    var isi = "no";
-    url = false;
-    if ( school.isi_url ) 
-    {
-        isi = "yes";
-        url = school_url + "/" + school.school_id + "?source=isi";
-    }
-    tr.appendChild( createListTd( isi, url, school ) );
     for ( var i = 0; i < keystages.length; i++ )
     {
         var keystage = keystages[i];
