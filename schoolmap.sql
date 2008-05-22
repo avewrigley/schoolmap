@@ -31,8 +31,6 @@ CREATE TABLE `address` (
 
 DROP TABLE IF EXISTS `dfes`;
 CREATE TABLE `dfes` (
-  `region` int(11) NOT NULL default '0',
-  `lea` int(11) NOT NULL default '0',
   `pupils_primary` int(11) default NULL,
   `school_id` int(11) NOT NULL default '0',
   `average_secondary` float default NULL,
@@ -47,7 +45,17 @@ CREATE TABLE `dfes` (
   `pupils_ks3` int(11) default '0',
   `year` int(11) NOT NULL default '2005',
   `average_primary` float default NULL,
-  PRIMARY KEY  (`school_id`,`year`)
+  PRIMARY KEY  (`school_id`,`year`),
+  KEY `urls` (`secondary_url`,`primary_url`),
+  KEY `urls2` (`ks3_url`,`post16_url`),
+  KEY `py` (`primary_url`,`year`),
+  KEY `sy` (`secondary_url`,`year`),
+  KEY `ks3y` (`ks3_url`,`year`),
+  KEY `p16y` (`post16_url`,`year`),
+  KEY `average_post16` (`average_post16`),
+  KEY `average_ks3` (`average_ks3`),
+  KEY `average_primary` (`average_primary`),
+  KEY `average_secondary` (`average_secondary`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -107,7 +115,9 @@ CREATE TABLE `postcode` (
   `code` varchar(8) NOT NULL default '',
   `location` point NOT NULL default '',
   PRIMARY KEY  (`code`),
-  SPATIAL KEY `location` (`location`(32))
+  SPATIAL KEY `location` (`location`(32)),
+  KEY `lon` (`lon`),
+  KEY `lat` (`lat`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -121,7 +131,8 @@ CREATE TABLE `school` (
   `address` varchar(255) default '',
   `name` varchar(100) NOT NULL default '',
   PRIMARY KEY  (`school_id`),
-  UNIQUE KEY `postcode_name` (`postcode`,`name`)
+  UNIQUE KEY `postcode_name` (`postcode`,`name`),
+  KEY `postcode` (`postcode`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -154,7 +165,8 @@ CREATE TABLE `source` (
 DROP TABLE IF EXISTS `url`;
 CREATE TABLE `url` (
   `modtime` int(11) NOT NULL default '0',
-  `url` varchar(100) NOT NULL default '',
+  `url` varchar(255) NOT NULL default '',
+  `requested` datetime default NULL,
   PRIMARY KEY  (`url`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
