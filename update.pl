@@ -10,7 +10,6 @@
 use strict;
 use warnings;
 use Carp;
-use Parallel::ForkManager;
 use File::Slurp;
 require URI;
 require DBI;
