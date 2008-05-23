@@ -93,13 +93,9 @@ DROP TABLE IF EXISTS `ofsted`;
 CREATE TABLE `ofsted` (
   `school_id` int(11) NOT NULL default '0',
   `ofsted_url` varchar(100) NOT NULL default '',
-  `lea_id` int(11) NOT NULL default '0',
-  `region_id` int(11) NOT NULL default '0',
   `ofsted_school_id` int(11) NOT NULL default '0',
   PRIMARY KEY  (`ofsted_school_id`),
-  UNIQUE KEY `school_id` (`school_id`),
-  KEY `lea_id` (`lea_id`),
-  KEY `region_id` (`region_id`)
+  UNIQUE KEY `school_id` (`school_id`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --

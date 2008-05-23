@@ -1,1 +1,1 @@
-mysqldump --user=schoolmap --pass=schoolmap --add-drop-table --no-data schoolmap > schoolmap.sql
+mysqldump --user=schoolmap --password=schoolmap --add-drop-table --no-data schoolmap > schoolmap.sql
