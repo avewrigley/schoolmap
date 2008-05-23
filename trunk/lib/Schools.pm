@@ -192,7 +192,7 @@ sub schools_xml
         push( @args, "POINT( $self->{centreX} $self->{centreY} )" );
     }
     my $what = join( ",", @what );
-    my $join = join( "", map " LEFT JOIN $_ ON $_.school_id = school.school_id", qw( ofsted dfes isi ) );
+    my $join = join( "", map " LEFT JOIN $_ USING ( school_id ) ", qw( ofsted dfes isi ) );
     my @where = @{$self->{where}};
     push( @where, "year = $self->{year}" ) if $self->{year};
     my $where = @where ? "WHERE " . join( " AND ", @where ) : '';

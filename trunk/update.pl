@@ -15,15 +15,13 @@ require URI;
 require DBI;
 use FindBin qw( $Bin );
 use lib "$Bin/lib";
-require HTML::TableContentParser;
-require HTML::TableParser;
-require HTML::TableExtract;
 use Pod::Usage;
 use Getopt::Long;
 require Geo::Multimap;
 use LWP::Simple;
 require HTML::TreeBuilder;
 require HTML::LinkExtractor;
+require HTML::TableExtract;
 require Proc::Pidfile;
 use File::Temp qw/ tempfile /;
 use Data::Dumper;
@@ -35,30 +33,7 @@ my $year = "2007";
 my $region;
 my $geo;
 my $dbh;
-
-sub get_text_nodes
-{
-    my $html = shift;
-    my $tree = HTML::TreeBuilder->new;
-    $tree->parse( $html );
-    my $node = $tree->elementify();
-    my @tnodes;
-    my @nodes = $node->look_down( @_ );
-    for my $n ( @nodes )
-    {
-        () = $n->look_down(
-            sub {
-                my $element = shift;
-                push( 
-                    @tnodes, 
-                    grep { ! ref( $_ ) && $_ =~ /\S/ } $element->content_list 
-                );
-            }
-        );
-    }
-    $tree->destroy();
-    return @tnodes;
-}
+my @types = qw( primary secondary ks3 post16 );
 
 sub get_links
 {
@@ -81,15 +56,10 @@ sub get_html
 {
     my $url = shift;
     my $force = shift;
-    unless ( $force || $opts{force} )
+    my $requested = get_requested( $url );
+    if ( $requested )
     {
-        warn "$url ...\n";
-        my $requested = get_requested( $url );
-        if ( $requested )
-        {
-            warn "$url already requested at $requested\n";
-            return ( undef, undef );
-        }
+        # warn "$url already requested at $requested\n";
     }
     warn "get $url\n";
     my $html = get( $url ) || warn "get $url failed";
@@ -277,6 +247,7 @@ sub get_school_details
             .*?hlong=([-\d\.]+);
         }six
     ;
+    $tree = $tree->delete;
     return %school;
 }
 
@@ -316,6 +287,7 @@ SQL
         $school{no_pupils} = $no_pupils;
         my $aps = $cells[$type->{indexes}{aps}];
         $school{aps} = $aps || 0;
+        warn "aps: $aps\n";
         my ( $school_html ) = get_html( $school_url );
         die "no HTML for $school_url\n" unless $school_html;
         %school = ( %school, get_school_details( $school_html ) );
@@ -366,17 +338,16 @@ sub update
         qr{/performancetables/group_07.pl\?Mode=[A-Z]+&Type=[A-Z]+&No=\d+&Base=[a-z]&F=\d+&L=\d+&Year=\d+&Phase=},
     );
     my %types = (
-        post16 => { type => "post16", indexes => { no_pupils => 1, aps => 3 } },
+        post16 => { type => "post16", indexes => { no_pupils => 1, aps => 4 } },
         primary => { type => "primary", indexes => { no_pupils => 1, aps => 15 } },
-        ks3 => { type => "secondary", },
-        secondary => { type => "secondary", indexes => { no_pupils => 1, aps => 4 }, },
+        ks3 => { type => "secondary", no_pupils => 1, aps => 15 },
+        secondary => { type => "secondary", indexes => { no_pupils => 1, aps => 15 }, },
     );
     my $base = 'http://www.dfes.gov.uk/performancetables/';
     $dbh->disconnect();
     $dbh = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
     $geo = Geo::Multimap->new();
     my ( $y ) = $year =~ /^\d\d(\d\d)$/;
-    my @types = qw( primary secondary ks3 post16 );
     my %type_link = (
         primary => "http://www.dfes.gov.uk/performancetables/primary_$y.shtml",
         secondary => "http://www.dfes.gov.uk/performancetables/schools_$y.shtml",
