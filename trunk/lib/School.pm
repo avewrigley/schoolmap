@@ -78,42 +78,23 @@ sub html
 
     for my $type ( keys %{$self->{types}} )
     {
-        my $year_sql = "SELECT DISTINCT year FROM dfes WHERE dfes.school_id = ? AND ${type}_url IS NOT NULL";
-        my $year_sth = $self->{dbh}->prepare( $year_sql );
-        $year_sth->execute( $school_id );
-        my @years = map { $_->[0] } @{$year_sth->fetchall_arrayref()};
-        $year_sth->finish();
-        for my $year ( @years )
-        {
-            my $type_source = {
-                name => "dfes_${year}_$type",
-                description => "$self->{types}{$type} ($year)",
-            };
-            $self->add_source( 
-                $type_source, 
-                "SELECT ${type}_url FROM dfes WHERE dfes.school_id = '$school_id' AND year = '$year'" 
-            );
-        }
+        my $type_source = {
+            name => "dfes_$type",
+            description => "$self->{types}{$type}",
+        };
+        $self->add_source( 
+            $type_source, 
+            "SELECT ${type}_url FROM dfes WHERE dfes.school_id = '$school_id'" 
+        );
     }
 
     $source_sth->finish();
     my ( $iframe_source );
     my @tabs;
+    my $current = 1;
     if ( @{$self->{sources}} )
     {
         my $current_source = $self->{sources}[0];
-        if ( $self->{source} )
-        {
-            $current_source = $self->{source};
-            if ( $self->{type} )
-            {
-                $current_source = "$self->{source}_$self->{type}";
-                if ( $self->{year} )
-                {
-                    $current_source = "$self->{source}_$self->{year}_$self->{type}";
-                }
-            }
-        }
         $iframe_source = $self->{url}{$current_source};
         for my $source ( @{$self->{sources}} )
         {
@@ -130,7 +111,6 @@ sub html
         { 
             school => $school,
             links => [
-                { url => "/wiki/index.php/$name", description => "Schoolmap Wiki" },
                 { url => "http://en.wikipedia.org/wiki/$name", description => "Wikipedia entry" },
             ],
             tabs => \@tabs,
