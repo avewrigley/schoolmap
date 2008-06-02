@@ -14,29 +14,17 @@ sub new
     require DBI;
     # $self->{debug} = 1;
     $self->{dbh} = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
-    unless ( $self->{year} )
-    {
-        my $years = $self->years();
-        $self->{year} = $years->[0]->{year};
-
-    }
-    my @where = ( "school.postcode = postcode.code" );
-    my @from = ( "school", "postcode" );
-    if ( $self->{source} && $self->{source} ne 'all' )
-    {
-        push( @where, "$self->{source}.school_id = school.school_id" );
-        push( @from, $self->{source} );
-    }
+    my @where = ( 
+        "school.postcode = postcode.code", 
+        "dfes.school_id = school.school_id",
+    );
+    my @from = ( "school", "postcode", "dfes" );
     my $type = $self->{type};
     if ( $type && $type ne 'all' )
     {
         warn "type: $type\n";
-        push( 
-            @where, 
-            "school_type.type = '$type'", 
-            "school_type.school_id = school.school_id"
-        );
         push( @from, "school_type" );
+        push( @where, "school_type.type = '$type'", "school_type.school_id = school.school_id" );
     }
     $self->{from} = "FROM " . join( ",", @from );
     if ( $self->{minLon} && $self->{maxLon} && $self->{minLat} && $self->{maxLat} )
@@ -59,23 +47,7 @@ sub new
 sub xml
 {
     my $self = shift;
-    if ( exists $self->{sources} )
-    {
-        $self->sources_xml();
-    }
-    elsif ( exists $self->{years} )
-    {
-        $self->years_xml();
-    }
-    elsif ( exists $self->{types} )
-    {
-        $self->types_xml();
-    }
-    elsif ( exists $self->{keystages} )
-    {
-        $self->keystages_xml();
-    }
-    elsif ( exists $self->{count} )
+    if ( exists $self->{count} )
     {
         $self->count_xml();
     }
@@ -95,48 +67,6 @@ my %label = (
     pru => "Pupil Referral Unit",
 );
 
-sub types_xml
-{
-    my $self = shift;
-    my $sql = "SELECT DISTINCT type from school_type";
-    if ( $self->{source} && $self->{source} ne 'all' )
-    {
-        $sql = <<EOF;
-SELECT DISTINCT type 
-    FROM school_type,$self->{source} 
-    WHERE $self->{source}.school_id = school_type.school_id
-EOF
-    }
-    warn "$sql\n";
-    my $sth = $self->{dbh}->prepare( $sql );
-    $sth->execute();
-    print "<types>";
-    while ( my ( $type ) = $sth->fetchrow_array )
-    {
-        print
-            '<type name="' . 
-            encode_entities( $type, '<>&"' )  .
-            '" label="' .
-            encode_entities( $label{$type}, '<>&"' )  .
-            '"/>'
-        ;
-    }
-    $sth->finish();
-    print "</types>";
-}
-
-sub years
-{
-    my $self = shift;
-    my $sql = "SELECT DISTINCT year FROM dfes ORDER BY year DESC";
-    my $sth = $self->{dbh}->prepare( $sql );
-    warn "$sql\n";
-    $sth->execute();
-    my $years = $sth->fetchall_arrayref( {} );
-    $sth->finish();
-    return $years;
-}
-
 sub process_template
 {
     my $self = shift;
@@ -147,42 +77,11 @@ sub process_template
     $self->{tt}->process( $template, $params, \*STDERR );
 }
 
-sub years_xml
-{
-    my $self = shift;
-    my $years = $self->years();
-    $self->process_template( "generic.xml", { tag => 'year', objs => $years } );
-}
-
-sub sources_xml
-{
-    my $self = shift;
-    my $sql = "SELECT * from source";
-    warn "$sql\n";
-    my $sth = $self->{dbh}->prepare( $sql );
-    $sth->execute();
-    my $sources = $sth->fetchall_arrayref( {} );
-    $sth->finish();
-    $self->process_template( "generic.xml", { tag => 'source', objs => $sources } );
-}
-
-sub keystages_xml
-{
-    my $self = shift;
-    my $sql = "SELECT * from keystage ORDER BY age";
-    warn "$sql\n";
-    my $sth = $self->{dbh}->prepare( $sql );
-    $sth->execute();
-    my $keystages = $sth->fetchall_arrayref( {} );
-    $sth->finish();
-    $self->process_template( "generic.xml", { tag => "keystage", objs => $keystages } );
-}
-
 sub schools_xml
 {
     my $self = shift;
     my @args;
-    my @what = ( "*,school.*" );
+    my @what = ( "*" );
     if ( $self->{centreX} && $self->{centreY} )
     {
         push( 
@@ -192,9 +91,8 @@ sub schools_xml
         push( @args, "POINT( $self->{centreX} $self->{centreY} )" );
     }
     my $what = join( ",", @what );
-    my $join = join( "", map " LEFT JOIN $_ USING ( school_id ) ", qw( ofsted dfes isi ) );
+    my $join = join( "", map " LEFT JOIN $_ USING ( school_id ) ", qw( ofsted isi ) );
     my @where = @{$self->{where}};
-    push( @where, "year = $self->{year}" ) if $self->{year};
     my $where = @where ? "WHERE " . join( " AND ", @where ) : '';
     my $sql = "SELECT $what $self->{from} $join $where";
     $self->{format} ||= "xml";

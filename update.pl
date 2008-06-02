@@ -93,11 +93,11 @@ SQL
         ( $school_id ) = $select_sth->fetchrow;
         return $school_id if defined $school_id;
     }
-    my $replace_sth = $dbh->prepare( <<SQL );
+    my $insert_sth = $dbh->prepare( <<SQL );
 REPLACE INTO school ( name, postcode, address ) VALUES ( ?,?,? )
 SQL
-    $replace_sth->execute( $name, $postcode, $address );
-    $replace_sth->finish();
+    $insert_sth->execute( $name, $postcode, $address );
+    $insert_sth->finish();
     $select_sth->execute( $name, $postcode );
     ( $school_id ) = $select_sth->fetchrow;
     $select_sth->finish();
@@ -261,18 +261,18 @@ sub process_school_row
     my ( $name, $url ) = get_name_and_url( $cells[0] );
     return unless $name;
     warn "no school url\n" and return unless $url;
-    my %school = ( year => $year, name => $name );
+    my %school = ( name => $name );
     my $school_url = URI->new_abs( $url, $schools_url );
     $school_url =~ s/\&amp;/&/g;
     my $sql = <<SQL;
-SELECT * FROM dfes WHERE ${type_name}_url = ? AND year = ?
+SELECT * FROM dfes WHERE ${type_name}_url = ? AND average_${type_name} <> 0
 SQL
     my $select_sth = $dbh->prepare( $sql );
-    $select_sth->execute( $school_url, $year );
+    $select_sth->execute( $school_url );
     my @row = $select_sth->fetchrow;
     if ( @row )
     {
-        # warn "$school_url $name ($type_name - $region ) ALREADY SEEN\n";
+        warn "$school_url $name ($type_name - $region ) ALREADY SEEN\n";
         return;
     }
     else
@@ -283,11 +283,14 @@ SQL
     return if no_update( $school{url} );
     eval {
         my $no_pupils = $cells[$type->{indexes}{no_pupils}];
+        warn "no_pupils: $no_pupils\n";
         die "no no_pupils\n" unless $no_pupils;
+        die "non-numeric no_pupils ($no_pupils)\n" if $no_pupils =~ /\D/;
         $school{no_pupils} = $no_pupils;
         my $aps = $cells[$type->{indexes}{aps}];
-        $school{aps} = $aps || 0;
         warn "aps: $aps\n";
+        die "no aps\n" unless $aps;
+        die "non-numeric aps ($aps)\n" unless $aps =~ /^[\d.]+$/;
         my ( $school_html ) = get_html( $school_url );
         die "no HTML for $school_url\n" unless $school_html;
         %school = ( %school, get_school_details( $school_html ) );
@@ -295,9 +298,21 @@ SQL
             @school{qw(name postcode address lat lon)}
         );
         add_school_type( $school{school_id}, $type->{type} );
-        $type->{replace_sth}->execute( 
-            @school{qw(school_id year no_pupils aps url)}
-        );
+        $type->{select_sth}->execute( $school{school_id} );
+        if ( $type->{select_sth}->fetchrow )
+        {
+            warn "school $school{school_id} exists ... update\n";
+            $type->{update_sth}->execute(
+                @school{qw(no_pupils aps url school_id)}
+            );
+        }
+        else
+        {
+            warn "school $school{school_id} is new ... insert\n";
+            $type->{insert_sth}->execute(
+                @school{qw(school_id no_pupils aps url)}
+            );
+        }
     };
     update_report( $@, $type_name, $school{url}, $school{name} );
 }
@@ -340,7 +355,7 @@ sub update
     my %types = (
         post16 => { type => "post16", indexes => { no_pupils => 1, aps => 4 } },
         primary => { type => "primary", indexes => { no_pupils => 1, aps => 15 } },
-        ks3 => { type => "secondary", no_pupils => 1, aps => 15 },
+        ks3 => { type => "secondary", indexes => { no_pupils => 1, aps => 15 } },
         secondary => { type => "secondary", indexes => { no_pupils => 1, aps => 15 }, },
     );
     my $base = 'http://www.dfes.gov.uk/performancetables/';
@@ -363,12 +378,20 @@ sub update
             "average_$type",
             "${type}_url",
         );
-        my $replace_sql = 
-            "REPLACE INTO dfes (" . 
-            join( ",", 'school_id', 'year', @keys ) . ") " .
-            "VALUES (" . join( ",", map "?", 'school_id', 'year', @keys ) . ")"
+        my $select_sql = "SELECT school_id FROM dfes WHERE school_id = ?";
+        $types{$type}{select_sth} = $dbh->prepare( $select_sql );
+        my $update_sql = 
+            "UPDATE dfes SET " . 
+            join( ",", map "$_=?", @keys ) . 
+            " WHERE school_id = ?"
         ;
-        $types{$type}{replace_sth} = $dbh->prepare( $replace_sql );
+        $types{$type}{update_sth} = $dbh->prepare( $update_sql );
+        my $insert_sql = 
+            "INSERT INTO dfes (" . 
+            join( ",", 'school_id', @keys ) . ") " .
+            "VALUES (" . join( ",", map "?", 'school_id', @keys ) . ")"
+        ;
+        $types{$type}{insert_sth} = $dbh->prepare( $insert_sql );
         my $callback = sub {
             my $url = shift;
             my ( $html ) = get_html( $url, 1 );
@@ -419,7 +442,7 @@ if ( $opts{flush} )
 update
 }
 
-my $logfile = "$Bin/logs/update.log";
+my $logfile = $opts{type} ? "$Bin/logs/update.$opts{type}.log" : "$Bin/logs/update.log";
 unless ( $opts{verbose} )
 {
     open( STDERR, ">>$logfile" ) or die "can't write to $logfile\n";

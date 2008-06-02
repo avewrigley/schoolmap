@@ -26,8 +26,6 @@ var schools;
 var noRedraw = false;
 var params = new Object();
 var keystages = new Array();
-var source2str = new Object();
-var type2str = new Object();
 
 var transaction;
 var current_url;
@@ -35,9 +33,6 @@ var current_url;
 var symbols = new Object();
 var curtags = [ "body", "a", "input", "select", "div" ];
 var listDiv;
-
-var letters = new Object();
-letters["post16"] = "O";
 
 function clearPostcode()
 {
@@ -217,16 +212,10 @@ function getNSchools()
 {
     if ( noRedraw ) return;
     setOrderBy();
-    var type = document.forms[0].type.value;
-    var source = document.forms[0].source.value;
     var order_by = document.forms[0].order_by.value;
-    var year = document.forms[0].year.value;
     var bounds = map.getExtent();
     var query_string = 
         "count=1" +
-        "source=" + escape( source ) +
-        "&year=" + escape( year ) +
-        "&type=" + escape( type ) +
         "&minLon=" + escape( bounds.left ) + 
         "&maxLon=" + escape( bounds.right ) + 
         "&minLat=" + escape( bounds.bottom ) + 
@@ -294,13 +283,9 @@ function getSchools()
 {
     if ( noRedraw ) return;
     setOrderBy();
-    var type = document.forms[0].type.value;
-    var source = document.forms[0].source.value;
     var order_by = document.forms[0].order_by.value;
     var status = "finding the top " + document.forms[0].limit.value + " ";
-    if ( type != "all" ) status = status + type2str[type] + " ";
     status = status + "schools ";
-    if ( source != 'all' ) status = status + "from " + source2str[source] + " ";
     if ( order_by == "distance" )
     {
         status = status + "closest to " + document.forms[0].postcode.value;
@@ -309,14 +294,9 @@ function getSchools()
     {
         status = status + "(ordered by " + order_by + ")";
     }
-    var year = document.forms[0].year.value;
-    status = status + " for " + year;
     setStatus( status );
     var bounds = map.getExtent();
     var query_string = 
-        "source=" + escape( source ) +
-        "&year=" + escape( year ) +
-        "&type=" + escape( type ) +
         "&order_by=" + escape( order_by ) +
         "&limit=" + escape( document.forms[0].limit.value ) +
         "&minLon=" + escape( bounds.left ) + 
@@ -412,7 +392,7 @@ function activateSchool( school )
 function createSchoolMarker( school, colour ) 
 {
     try {
-        school.letter = getLetter( school.type );
+        school.letter = getLetter( school.name );
         var point = new OpenLayers.LonLat( school.lon, school.lat );
         var marker = createMarker( school.letter, colour, point );
         marker.events.register( "mouseout", marker, function() { changeLinksColour( this.school.links, "blue" ) } );
@@ -463,7 +443,6 @@ function initTableHead( tr )
     for ( var i = 0; i < keystages.length; i++ ) 
         createHeadCell( tr, keystages[i].description, "average score" );
     ;
-    createHeadCell( tr, "type", "Type of school" );
     if ( postcodePt ) 
     {
         var postcode = document.forms[0].postcode.value;
@@ -600,22 +579,16 @@ function createListRow( no, school )
         if ( school[ave] && school[ave] != 0 )
         {
             val = school[ave];
-            var year = document.forms[0].year.value;
             url = 
                 school_url + "/" +
                 school.school_id + 
-                "?source=dfes" +
-                "&year=" + year +
-                "&type=" + keystage.name
+                "?source=dfes"
             ;
         }
         var td = createListTd( val, url, school );
         td.noWrap = true;
         tr.appendChild( td );
     }
-    var type = "-";
-    if ( school.type ) type = school.type;
-    tr.appendChild( createListTd( type ) );
     if ( postcodePt )
     {
         var dist = sprintf( "%0.2f", ( school.distance / 1000 ) );
@@ -703,14 +676,10 @@ function addOpt( sel, str, val, isSel )
     return opt;
 }
 
-function getLetter( type )
+function getLetter( name )
 {
-    if ( ! type ) return "-";
-    if ( type == "undefined" ) return "-";
-    if ( type == "null" ) return "-";
-    if ( letters[type] ) return letters[type];
-    var letter = type.substr( 0, 1 ).toUpperCase();
-    letters[type] = letter;
+    name = name.replace( /The /i, "" );
+    var letter = name.substr( 0, 1 ).toUpperCase();
     return letter;
 }
 
