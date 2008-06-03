@@ -20,12 +20,6 @@ sub new
     );
     my @from = ( "school", "postcode", "dfes" );
     my $type = $self->{type};
-    if ( $type && $type ne 'all' )
-    {
-        warn "type: $type\n";
-        push( @from, "school_type" );
-        push( @where, "school_type.type = '$type'", "school_type.school_id = school.school_id" );
-    }
     $self->{from} = "FROM " . join( ",", @from );
     if ( $self->{minLon} && $self->{maxLon} && $self->{minLat} && $self->{maxLat} )
     {
@@ -114,12 +108,9 @@ sub schools_xml
     warn "ARGS: @args\n";
     my $sth = $self->{dbh}->prepare( $sql );
     $sth->execute( @args );
-    my $types_sth = $self->{dbh}->prepare( "SELECT type FROM school_type WHERE school_id = ?" );
     my @schools;
     while ( my $school = $sth->fetchrow_hashref )
     {
-        $types_sth->execute( $school->{school_id} );
-        $school->{type} = join " / ", map $_->[0], @{$types_sth->fetchall_arrayref()};
         delete $school->{location};
         push( @schools, $school );
     }

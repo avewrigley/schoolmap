@@ -28,7 +28,7 @@ use Data::Dumper;
 use CGI::Lite;
 
 my %opts;
-my @opts = qw( flush type=s force silent pidfile! verbose );
+my @opts = qw( flush type=s silent pidfile! verbose );
 my $year = "2007";
 my $region;
 my $geo;
@@ -55,7 +55,6 @@ sub get_links
 sub get_html
 {
     my $url = shift;
-    my $force = shift;
     my $requested = get_requested( $url );
     if ( $requested )
     {
@@ -87,12 +86,6 @@ sub create_school
 SELECT school_id FROM school WHERE name = ? AND postcode = ?
 SQL
     my $school_id;
-    unless ( $opts{force} )
-    {
-        $select_sth->execute( $name, $postcode );
-        ( $school_id ) = $select_sth->fetchrow;
-        return $school_id if defined $school_id;
-    }
     my $insert_sth = $dbh->prepare( <<SQL );
 REPLACE INTO school ( name, postcode, address ) VALUES ( ?,?,? )
 SQL
@@ -102,17 +95,6 @@ SQL
     ( $school_id ) = $select_sth->fetchrow;
     $select_sth->finish();
     return $school_id;
-}
-
-sub add_school_type
-{
-    my $school_id = shift;
-    my $type = shift;
-    my $insert_sth = $dbh->prepare( <<SQL );
-INSERT IGNORE INTO school_type ( school_id, type ) VALUES ( ?,? )
-SQL
-    $insert_sth->execute( $school_id, $type );
-    $insert_sth->finish();
 }
 
 {
@@ -290,6 +272,7 @@ SQL
         my $aps = $cells[$type->{indexes}{aps}];
         warn "aps: $aps\n";
         die "no aps\n" unless $aps;
+        $school{aps} = $aps;
         die "non-numeric aps ($aps)\n" unless $aps =~ /^[\d.]+$/;
         my ( $school_html ) = get_html( $school_url );
         die "no HTML for $school_url\n" unless $school_html;
@@ -297,7 +280,6 @@ SQL
         $school{school_id} = create_school( 
             @school{qw(name postcode address lat lon)}
         );
-        add_school_type( $school{school_id}, $type->{type} );
         $type->{select_sth}->execute( $school{school_id} );
         if ( $type->{select_sth}->fetchrow )
         {
@@ -309,9 +291,8 @@ SQL
         else
         {
             warn "school $school{school_id} is new ... insert\n";
-            $type->{insert_sth}->execute(
-                @school{qw(school_id no_pupils aps url)}
-            );
+            my @values = @school{qw(school_id no_pupils aps url)};
+            $type->{insert_sth}->execute( @values );
         }
     };
     update_report( $@, $type_name, $school{url}, $school{name} );
@@ -386,12 +367,12 @@ sub update
             " WHERE school_id = ?"
         ;
         $types{$type}{update_sth} = $dbh->prepare( $update_sql );
-        my $insert_sql = 
+        $types{$type}{insert_sql} = 
             "INSERT INTO dfes (" . 
             join( ",", 'school_id', @keys ) . ") " .
             "VALUES (" . join( ",", map "?", 'school_id', @keys ) . ")"
         ;
-        $types{$type}{insert_sth} = $dbh->prepare( $insert_sql );
+        $types{$type}{insert_sth} = $dbh->prepare( $types{$type}{insert_sql} );
         my $callback = sub {
             my $url = shift;
             my ( $html ) = get_html( $url, 1 );
@@ -432,14 +413,12 @@ if ( $opts{pidfile} )
 if ( $opts{flush} )
 {
     $dbh = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
-    for my $table ( qw( dfes ofsted isi school school_type url ) )
+    for my $table ( qw( dfes ofsted isi school url ) )
     {
         warn "flush $table\n";
         $dbh->do( "DELETE FROM $table" );
     }
     $dbh->disconnect();
-    exit;
-update
 }
 
 my $logfile = $opts{type} ? "$Bin/logs/update.$opts{type}.log" : "$Bin/logs/update.log";
