@@ -9,7 +9,7 @@
     <script src="/js/schoolmap.js" type="text/javascript"></script>
     <script src="/js/yui/build/yahoo/yahoo.js" type="text/javascript"></script>
     <script src="/js/yui/build/connection/connection.js" type="text/javascript"></script>
-    <script src='http://dev.virtualearth.net/mapcontrol/v3/mapcontrol.js'></script>
+    <script src='http://dev.virtualearth.net/mapcontrol/v3/mapcontrol.js' type="text/javascript"></script>
     <!-- Required CSS --> 
     <link type="text/css" rel="stylesheet" href="/js/yui/build/logger/assets/logger.css" />
     <!-- Dependencies --> 
@@ -112,11 +112,13 @@ google_ad_channel = "";
     <tr>
         <td valign="top">
             <div id="map" style="border: 1px solid black; width: 500px; height: 600px;"></div>
-            <form>
-            lat: <input id="lat" size="5" name="lat">
-            lon: <input id="lon" size="5" name="lon">
-            x: <input id="x" size="5" name="x">
-            y: <input id="y" size="5" name="y">
+            <form action="/" >
+                <fieldset>
+                    <input type="hidden" id="lat" size="5" name="lat" />
+                    <input type="hidden" id="lon" size="5" name="lon" />
+                    <input type="hidden" id="x" size="5" name="x" />
+                    <input type="hidden" id="y" size="5" name="y" />
+                </fieldset>
             </form>
         </td>
         <td valign="top">
