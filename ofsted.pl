@@ -40,6 +40,14 @@ if ( $opts{pidfile} )
 }
 my $logfile = "$Bin/logs/ofsted.log";
 $dbh = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
+if ( $opts{flush} )
+{
+    for my $table ( qw( ofsted school ) )
+    {
+        warn "flush $table\n";
+        $dbh->do( "DELETE FROM $table" );
+    }
+}
 $sc = CreateSchool->new( dbh => $dbh );
 my $rsth = $dbh->prepare( "REPLACE INTO ofsted ( ofsted_id, ofsted_url ) VALUES ( ?, ? )" );
 unless ( $opts{verbose} )
@@ -74,9 +82,14 @@ for my $type ( keys %types )
             ( $school{ofsted_id} ) = $html =~ m{<th>Unique reference number</th>\s*<td>(\d+)</td>}sim;
             die "no ofsted_id\n" unless $school{ofsted_id};
             warn "ofsted_id: $school{ofsted_id}\n";
-            ( $school{address} ) = $html =~ m{<p class="address">(.*?)</p>}sim;
-            die "no address\n" unless $school{address};
-            ( $school{postcode} ) = $school{address} =~ m{<span class="line">([A-Z0-9]+\s+[A-Z0-9A-Z]+)\s*</span>};
+            my ( $address ) = $html =~ m{<p class="address">(.*?)</p>}sim;
+            warn "address: $address\n";
+            die "no address\n" unless $address;
+            my @address = grep /\S/, $address =~ m{<span class="line">(.*?)</span>}gsim;
+            $school{address} = join( ",", @address );
+            warn "address: $school{address}\n";
+            $school{postcode} = $address[-1];
+            warn "postcode: $school{postcode}\n";
             die "no postcode ($school{address})\n" unless $school{postcode};
             $school{postcode} =~ s/\s*//g;
             warn "POSTCODE: $school{postcode}\n";
@@ -91,7 +104,6 @@ for my $type ( keys %types )
         {
             warn "$school{name} SUCCESS\n";
         }
-        exit;
     }
 }
 print STDERR "$0 ($$) at ", scalar( localtime ), "\n";

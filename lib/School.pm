@@ -7,20 +7,20 @@ use Carp;
 use CGI::Lite;
 require DBI;
 use Template;
+use Data::Dumper;
 
 sub new
 {
     my $class = shift;
-    my $self = bless { @_ }, $class;
+    my %args = @_;
+    my $self = bless \%args, $class;
     $self->{dbh} = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
-    $self->{sources} = [];
-    $self->{url} = {};
-    $self->{description} = {};
     $self->{types} = {
         post16 => "GCE and VCE",
         secondary => "GCSE",
         primary => "Key stage 2",
     };
+    warn Dumper $self;
     return $self;
 }
 
@@ -30,90 +30,58 @@ sub DESTROY
     $self->{dbh}->disconnect();
 }
 
-sub add_source
+sub get_tabs
 {
     my $self = shift;
-    my $source = shift;
-    my $sql = shift;
-    my $sth = $self->{dbh}->prepare( $sql );
-    $sth->execute();
-    my ( $url ) = $sth->fetchrow;
-    return unless $url;
-    $self->{url}{$source->{name}} = $url;
-    $self->{description}{$source->{name}} = $source->{description};
-    push( @{$self->{sources}}, $source->{name} );
-    $sth->finish();
-}
-
-sub get_tab
-{
-    my $self = shift;
-    my $source = shift;
-    my $class = shift;
-    warn "get tab for $source\n";
-    return {
-        url => $self->{url}{$source},
-        description => $self->{description}{$source},
-        class => $class,
-    };
+    my $school = shift;
+    my $type = shift;
+    my $tabs = [
+        { 
+            url => "http://en.wikipedia.org/wiki/$school->{name}", 
+            description => "Wikipedia entry" 
+        },
+    ];
+    for my $url_type ( "ofsted", keys %{$self->{types}} )
+    {
+        my $key = "${url_type}_url";
+        warn "$url_type ($type - $key) TAB\n";
+        if ( my $url = $school->{$key} )
+        {
+            warn "ADD A $url_type TAB\n";
+            push( @$tabs, {
+                    url => $url,
+                    description => $self->{types}{$url_type} || "Ofsted",
+                    current => $url_type eq $type
+                }
+            );
+        }
+    }
+    return $tabs;
 }
 
 sub html
 {
     my $self = shift;
 
-    my $school_id = $self->{school_id} or die "no school_id\n";
-    my $school_sql = "SELECT * FROM school WHERE school.school_id = ?";
+    my $school_sql = "SELECT * FROM school LEFT JOIN dfes USING ( dfes_id ) LEFT JOIN ofsted USING( ofsted_id ) WHERE school.$self->{table}_id = ?";
+    warn "$school_sql\n";
     my $school_sth = $self->{dbh}->prepare( $school_sql );
-    $school_sth->execute( $school_id );
+    $school_sth->execute( $self->{id} );
     my $school = $school_sth->fetchrow_hashref;
     $school_sth->finish();
-    my $source_sql = "SELECT * FROM source WHERE name <> 'dfes'";
-    my $source_sth = $self->{dbh}->prepare( $source_sql );
-    $source_sth->execute();
-    while ( my $source = $source_sth->fetchrow_hashref )
-    {
-        $self->add_source( $source, "SELECT $source->{name}.$source->{name}_url FROM $source->{name} WHERE $source->{name}.school_id = '$school_id'" );
-    }
-
-    for my $type ( keys %{$self->{types}} )
-    {
-        my $type_source = {
-            name => "dfes_$type",
-            description => "$self->{types}{$type}",
-        };
-        $self->add_source( 
-            $type_source, 
-            "SELECT ${type}_url FROM dfes WHERE dfes.school_id = '$school_id'" 
-        );
-    }
-
-    $source_sth->finish();
-    my ( $iframe_source );
-    my @tabs;
-    my $current = 1;
-    if ( @{$self->{sources}} )
-    {
-        my $current_source = $self->{sources}[0];
-        $iframe_source = $self->{url}{$current_source};
-        for my $source ( @{$self->{sources}} )
-        {
-            push( @tabs, $self->get_tab( $source, $current_source eq $source ) );
-        }
-    }
-
-    my $name = $school->{name}; 
-    $name =~ s/\s+/_/g;
-    $name =~ s/[^A-Za-z0-9_]//g;
+    warn Dumper $school;
+    $school->{name} =~ s/\s+/_/g;
+    $school->{name} =~ s/[^A-Za-z0-9_]//g;
+    my $key = $self->{type} ? "$self->{type}_url" : "$self->{table}_url";
+    my $iframe_source = $school->{$key};
+    warn "iframe_source: $key $iframe_source\n";
+    my $tabs = $self->get_tabs( $school, $self->{type} || $self->{table} );
     my $tt = Template->new( { INCLUDE_PATH => "/var/www/www.schoolmap.org.uk/templates" } );
     $tt->process(
         "school.html", 
         { 
             school => $school,
-            links => [
-                { url => "http://en.wikipedia.org/wiki/$name", description => "Wikipedia entry" },
-            ],
-            tabs => \@tabs,
+            tabs => $tabs,
             iframe_source => $iframe_source,
         }
     );

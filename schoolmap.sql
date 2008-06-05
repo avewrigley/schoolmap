@@ -67,9 +67,7 @@ DROP TABLE IF EXISTS `ofsted`;
 CREATE TABLE `ofsted` (
   `ofsted_id` int(10) unsigned NOT NULL,
   `ofsted_url` varchar(255) NOT NULL default '',
-  `ofsted_school_id` int(11) NOT NULL default '0',
-  PRIMARY KEY  (`ofsted_school_id`),
-  UNIQUE KEY `school_id` (`ofsted_id`)
+  PRIMARY KEY  (`ofsted_id`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -96,13 +94,14 @@ CREATE TABLE `postcode` (
 
 DROP TABLE IF EXISTS `school`;
 CREATE TABLE `school` (
-  `postcode` varchar(100) NOT NULL default '',
-  `dfes_id` int(10) unsigned NOT NULL default '0',
-  `address` varchar(255) default '',
   `name` varchar(100) NOT NULL default '',
+  `postcode` varchar(100) NOT NULL default '',
+  `address` varchar(255) default '',
+  `dfes_id` int(10) unsigned default NULL,
   `ofsted_id` int(10) unsigned default NULL,
-  PRIMARY KEY  (`dfes_id`),
-  UNIQUE KEY `postcode_name` (`postcode`,`name`),
+  PRIMARY KEY  (`postcode`,`name`),
+  KEY `dfes_id` (`dfes_id`),
+  KEY `ofsted_id` (`ofsted_id`),
   KEY `postcode` (`postcode`),
   KEY `name` (`name`)
 ) ENGINE=MyISAM AUTO_INCREMENT=108604 DEFAULT CHARSET=latin1;
@@ -128,4 +127,4 @@ CREATE TABLE `url` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2008-06-05  9:54:07
+-- Dump completed on 2008-06-05 13:51:24

@@ -23,6 +23,7 @@ require HTML::TreeBuilder;
 require HTML::LinkExtractor;
 require HTML::TableExtract;
 require Proc::Pidfile;
+require CreateSchool;
 use File::Temp qw/ tempfile /;
 use Data::Dumper;
 use CGI::Lite;
@@ -33,7 +34,7 @@ my $year = "2007";
 my $region;
 my $la;
 my $geo;
-my $dbh;
+my ( $sc, $dbh );
 my @types = qw( primary secondary ks3 post16 );
 my %result;
 
@@ -54,44 +55,12 @@ sub get_links
     return @afhrefs;
 }
 
-sub set_modtime
-{
-    my $url = shift;
-    my $modtime = ( head( $url ) )[2] || 0;
-    my $sql = "REPLACE INTO url ( url, modtime, requested ) VALUES ( ?, ?, NOW() )";
-    my $sth = $dbh->prepare( $sql );
-    $sth->execute( $url, $modtime );
-    $sth->finish;
-}
-
 sub get_html
 {
     my $url = shift;
     warn "get $url\n";
     my $html = get( $url ) || warn "get $url failed";
-    set_modtime( $url );
     return ( $html, $url );
-}
-
-sub create_school
-{
-    my %school = @_;
-
-    die "no name" unless $school{name};
-    die "no postcode" unless $school{postcode};
-    $school{postcode} = uc( $school{postcode} );
-    $school{postcode} =~ s/[^0-9A-Z]//g;
-    unless ( $school{lat} && $school{lon} )
-    {
-        ( $school{lat}, $school{lon} ) = $geo->coords( $school{postcode} );
-    }
-    die "no lat / lon for postcode $school{postcode}" 
-        unless $school{lat} && $school{lon};
-    my $insert_sth = $dbh->prepare( <<SQL );
-REPLACE INTO school ( dfes_id, name, postcode, address ) VALUES ( ?,?,?,? )
-SQL
-    $insert_sth->execute( @school{qw( dfes_id name postcode address )} );
-    $insert_sth->finish();
 }
 
 sub update_report
@@ -240,7 +209,7 @@ sub process_school_row
             my %school = get_school_details( $school_html );
             $school{dfes_id} = $dfes_id;
             $school{name} = $name;
-            create_school( %school );
+            $sc->create_school( 'dfes_id', %school );
         }
     };
     update_report( $@, $type_name, $dfes_results{url}, $dfes_results{name} );
@@ -306,8 +275,6 @@ sub update
         secondary => { type => "secondary", indexes => { no_pupils => 1, aps => 15 }, },
     );
     my $base = 'http://www.dfes.gov.uk/performancetables/';
-    $dbh->disconnect();
-    $dbh = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
     my ( $y ) = $year =~ /^\d\d(\d\d)$/;
     my %type_link = (
         primary => "http://www.dfes.gov.uk/performancetables/primary_$y.shtml",
@@ -361,7 +328,6 @@ sub update
         };
         follow_links( $type_link, $callback, @re );
     }
-    $dbh->disconnect();
     print_report();
     warn "all done\n";
     warn "update dfes finished\n";
@@ -377,24 +343,23 @@ if ( $opts{pidfile} )
     $pp = Proc::Pidfile->new( silent => $opts{silent} );
 }
 
+$dbh = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
+$sc = CreateSchool->new( dbh => $dbh );
 if ( $opts{flush} )
 {
-    $dbh = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
-    for my $table ( qw( dfes ofsted isi school url ) )
+    for my $table ( qw( dfes ) )
     {
         warn "flush $table\n";
         $dbh->do( "DELETE FROM $table" );
     }
-    $dbh->disconnect();
 }
 
-my $logfile = $opts{type} ? "$Bin/logs/update.$opts{type}.log" : "$Bin/logs/update.log";
+my $logfile = $opts{type} ? "$Bin/logs/dfes.$opts{type}.log" : "$Bin/logs/dfes.log";
 unless ( $opts{verbose} )
 {
     open( STDERR, ">>$logfile" ) or die "can't write to $logfile\n";
 }
 print STDERR "$0 ($$) at ", scalar( localtime ), "\n";
-$dbh = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
 $geo = Geo::Multimap->new();
 update();
 $dbh->disconnect();
