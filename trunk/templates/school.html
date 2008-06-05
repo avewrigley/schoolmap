@@ -11,14 +11,11 @@
         <h2>[% school.name | html %]</h2>
         <p>[% school.address | html %]</p>
         <p>[% school.postcode | html %]</p>
-        [% FOREACH link IN links %]
-        <a href="[% link.url | html %]">[% link.description | html %]</a>
-        [% END %]
         <div id="navcontainer">
             <ul id="navlist">
                 [% FOREACH tab IN tabs %]
                     <li><a 
-                        [% IF tab.class %]class="current"[% END %]
+                        [% IF tab.current %]class="current"[% END %]
                         target="details" 
                         href="[% tab.url %]"
                         onclick="

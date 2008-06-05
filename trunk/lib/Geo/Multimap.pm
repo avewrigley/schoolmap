@@ -28,8 +28,8 @@ sub DESTROY
 {
     my $self = shift;
     return unless $self->{dbh};
-    $self->{ssth}->finish();
-    $self->{isth}->finish();
+    $self->{ssth}->finish() if $self->{ssth};
+    $self->{isth}->finish() if $self->{isth};
     $self->{dbh}->disconnect();
 }
 

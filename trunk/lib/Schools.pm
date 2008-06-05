@@ -6,34 +6,16 @@ use warnings;
 use Carp;
 use HTML::Entities qw( encode_entities );
 use Template;
+use Data::Dumper;
 
 sub new
 {
     my $class = shift;
     my $self = bless { @_ }, $class;
+    warn Dumper $self;
     require DBI;
     # $self->{debug} = 1;
     $self->{dbh} = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
-    my @where = ( 
-        "school.postcode = postcode.code", 
-        "dfes.dfes_id = school.dfes_id",
-    );
-    my @from = ( "dfes", "postcode", "school" );
-    my $type = $self->{type};
-    $self->{from} = "FROM " . join( ",", @from );
-    if ( $self->{minLon} && $self->{maxLon} && $self->{minLat} && $self->{maxLat} )
-    {
-        push( 
-            @where,
-            (
-                "postcode.lon > $self->{minLon}",
-                "postcode.lon < $self->{maxLon}",
-                "postcode.lat > $self->{minLat}",
-                "postcode.lat < $self->{maxLat}",
-            )
-        );
-    }
-    $self->{where} = \@where;
     $self->{tt} = Template->new( { INCLUDE_PATH => "/var/www/www.schoolmap.org.uk/templates" } );
     return $self;
 }
@@ -41,14 +23,7 @@ sub new
 sub xml
 {
     my $self = shift;
-    if ( exists $self->{count} )
-    {
-        $self->count_xml();
-    }
-    else
-    {
-        $self->schools_xml();
-    }
+    $self->schools_xml();
 }
 
 my %label = (
@@ -85,10 +60,32 @@ sub schools_xml
         push( @args, "POINT( $self->{centreX} $self->{centreY} )" );
     }
     my $what = join( ",", @what );
-    my $join = " LEFT JOIN ofsted ON ( school.ofsted_id = ofsted.ofsted_id ) ";
-    my @where = @{$self->{where}};
+    my @where = ( "school.postcode = postcode.code" );
+    if ( $self->{minLon} && $self->{maxLon} && $self->{minLat} && $self->{maxLat} )
+    {
+        push( 
+            @where,
+            (
+                "postcode.lon > $self->{minLon}",
+                "postcode.lon < $self->{maxLon}",
+                "postcode.lat > $self->{minLat}",
+                "postcode.lat < $self->{maxLat}",
+            )
+        );
+    }
+    if ( $self->{ofsted} eq 'yes' )
+    {
+        push( @where, "school.ofsted_id IS NOT NULL" );
+    }
     my $where = @where ? "WHERE " . join( " AND ", @where ) : '';
-    my $sql = "SELECT $what $self->{from} $join $where";
+    my @from = ( "dfes", "postcode", "school" );
+    $self->{from} = "FROM " . join( ",", @from );
+    my $sql = <<EOF;
+SELECT SQL_CALC_FOUND_ROWS $what FROM postcode, school 
+    LEFT JOIN ofsted ON ( school.ofsted_id = ofsted.ofsted_id )
+    LEFT JOIN dfes ON ( school.dfes_id = dfes.dfes_id )
+    $where
+EOF
     $self->{format} ||= "xml";
     if ( $self->{order_by} )
     {
@@ -114,26 +111,13 @@ sub schools_xml
         delete $school->{location};
         push( @schools, $school );
     }
+    my $sth = $self->{dbh}->prepare( "SELECT FOUND_ROWS();" );
+    $sth->execute();
+    my ( $nschools ) = $sth->fetchrow();
+    warn "NROWS: $nschools\n";
     $self->process_template( 
         "school.$self->{format}", 
-        { schools => \@schools }
-    );
-}
-
-sub count_xml
-{
-    my $self = shift;
-    my @where = @{$self->{where}};
-    my $where = @where ? "WHERE " . join( " AND ", @where ) : '';
-    my $sql = "SELECT COUNT( * ) $self->{from} $where";
-    $self->{format} ||= "xml";
-    warn "$sql\n";
-    my $sth = $self->{dbh}->prepare( $sql );
-    $sth->execute();
-    my ( $count ) = $sth->fetchrow;
-    $self->process_template( 
-        "count.xml", 
-        { count => $count }
+        { nschools => $nschools, schools => \@schools }
     );
 }
 

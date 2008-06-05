@@ -180,20 +180,23 @@ function getSchoolsCallback( response )
         removeChildren( listDiv );
         googleDiv.innerHTML = google_html;
         var xmlDoc = response.responseXML;
-        var schoolsXml = xmlDoc.documentElement.getElementsByTagName( "school" );
-        for ( var i = 0; i < schoolsXml.length; i++ )
+        var doc = xmlDoc.documentElement;
+        var docObj = xml2obj( doc );
+        var nschools = docObj.nschools;
+        var schoolXmlArray = doc.getElementsByTagName( "school" );
+        for ( var i = 0; i < schoolXmlArray.length; i++ )
         {
-            var school = xml2obj( schoolsXml[i] );
+            var school = xml2obj( schoolXmlArray[i] );
             schools.push( school );
             createSchoolMarker( school, "blue" );
         }
-        if ( schoolsXml.length )
+        if ( schoolXmlArray.length )
         {
             listDiv.appendChild( createListTable() );
         }
         else
         {
-            setStatus( "there are no schools in on this map" ); 
+            setStatus( "there are no schools on this map" ); 
         }
         if ( postcodePt )
         {
@@ -205,37 +208,9 @@ function getSchoolsCallback( response )
             noRedraw = false;
         }
     } catch( e ) { alert( e ) }
-    getNSchools();
-}
-
-function getNSchools()
-{
-    if ( noRedraw ) return;
-    setOrderBy();
-    var order_by = document.forms[0].order_by.value;
-    var bounds = map.getExtent();
-    var query_string = 
-        "count=1" +
-        "&minLon=" + escape( bounds.left ) + 
-        "&maxLon=" + escape( bounds.right ) + 
-        "&minLat=" + escape( bounds.bottom ) + 
-        "&maxLat=" + escape( bounds.top )
-    ;
-    var url = schools_url + "?" + query_string;
-    get( url, getNSchoolsCallback );
-}
-
-function getNSchoolsCallback( response )
-{
-    var xmlDoc = response.responseXML;
-    var schoolsXml = xmlDoc.documentElement.getElementsByTagName( "schools" );
-    if ( schoolsXml[0] )
-    {
-        var obj = xml2obj( schoolsXml[0] );
-        var b = document.createElement( "B" );
-        b.appendChild( document.createTextNode( schools.length + " / " + obj.count + " schools" ) );
-        listDiv.appendChild( b );
-    }
+    var b = document.createElement( "B" );
+    b.appendChild( document.createTextNode( schools.length + " / " + nschools + " schools" ) );
+    listDiv.appendChild( b );
 }
 
 function get( url, callback )
@@ -284,6 +259,8 @@ function getSchools()
     if ( noRedraw ) return;
     setOrderBy();
     var order_by = document.forms[0].order_by.value;
+    var ofsted = document.forms[0].ofsted.value;
+    console.log( "ofsted: " + ofsted );
     var status = "finding the top " + document.forms[0].limit.value + " ";
     status = status + "schools ";
     if ( order_by == "distance" )
@@ -298,6 +275,7 @@ function getSchools()
     var bounds = map.getExtent();
     var query_string = 
         "&order_by=" + escape( order_by ) +
+        "&ofsted=" + escape( ofsted ) +
         "&limit=" + escape( document.forms[0].limit.value ) +
         "&minLon=" + escape( bounds.left ) + 
         "&maxLon=" + escape( bounds.right ) + 
@@ -316,14 +294,6 @@ function getSchools()
             "&postcode=" + escape( document.forms[0].postcode.value )
         ;
     }
-    // else
-    // {
-        // var centre = map.getCenter();
-        // query_string +=
-            // "&centreLon=" + escape( centre.lon ) +
-            // "&centreLat=" + escape( centre.lat )
-        // ;
-    // }
     schools = new Array();
     var url = schools_url + "?" + query_string;
     createLinkTo( query_string );
@@ -528,7 +498,7 @@ function createListTd( text, url, school )
     if ( url )
     {
         var a = document.createElement( "A" );
-        a.target = school.school_id;
+        a.target = "_blank";
         a.onclick = function() { window.open( url, "school", "status,scrollbars,resizable" ); return false; };
         a.href = url;
         if ( ! school.links ) school.links = new Array();
@@ -559,33 +529,31 @@ function myround( num, precision )
 function createListRow( no, school )
 {
     var tr = document.createElement("TR");
-    var url = school_url + "/" + school.school_id;
     tr.appendChild( createListTd( no+1, url, school ) );
     tr.appendChild( createListTd( school.name, url, school ) );
-    var ofsted = "no";
-    url = false;
     if ( school.ofsted_url ) 
     {
-        ofsted = "yes";
-        url = school_url + "/" + school.school_id + "?source=ofsted";
+        var url = school_url + "?table=ofsted&id=" + school.ofsted_id;
+        tr.appendChild( createListTd( "yes", url, school ) );
     }
-    tr.appendChild( createListTd( ofsted, url, school ) );
+    else
+    {
+        tr.appendChild( createListTd( "no", false, school ) );
+    }
     for ( var i = 0; i < keystages.length; i++ )
     {
         var keystage = keystages[i];
-        var val = "-";
         var ave = "average_" + keystage.name;
-        var url = false;
         if ( school[ave] && school[ave] != 0 )
         {
-            val = school[ave];
-            url = 
-                school_url + "/" +
-                school.school_id + 
-                "?source=dfes"
-            ;
+            var val = school[ave];
+            var url = school_url + "?table=dfes&type=" + keystage.name + "&id=" + school.dfes_id;
+            var td = createListTd( val, url, school );
         }
-        var td = createListTd( val, url, school );
+        else
+        {
+            var td = createListTd( "-", false, school );
+        }
         td.noWrap = true;
         tr.appendChild( td );
     }

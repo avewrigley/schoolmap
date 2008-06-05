@@ -17,11 +17,8 @@ require School;
 open( STDERR, ">>/var/www/www.schoolmap.org.uk/logs/school.log" );
 warn "$$ at ", scalar( localtime ), "\n";
 my %formdata = CGI::Lite->new->parse_form_data();
-my $path_info = $ENV{PATH_INFO};
-my ( $school_id ) = $path_info =~ /(\d+)/;
-warn map "$_ = $formdata{$_}\n", keys %formdata if %formdata;
 print "Content-Type: text/html\n\n";
-School->new( school_id => $school_id, %formdata )->html();
+School->new( %formdata )->html();
 
 #------------------------------------------------------------------------------
 #
