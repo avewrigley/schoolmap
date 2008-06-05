@@ -16,9 +16,9 @@ sub new
     $self->{dbh} = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
     my @where = ( 
         "school.postcode = postcode.code", 
-        "dfes.school_id = school.school_id",
+        "dfes.dfes_id = school.dfes_id",
     );
-    my @from = ( "school", "postcode", "dfes" );
+    my @from = ( "dfes", "postcode", "school" );
     my $type = $self->{type};
     $self->{from} = "FROM " . join( ",", @from );
     if ( $self->{minLon} && $self->{maxLon} && $self->{minLat} && $self->{maxLat} )
@@ -85,7 +85,7 @@ sub schools_xml
         push( @args, "POINT( $self->{centreX} $self->{centreY} )" );
     }
     my $what = join( ",", @what );
-    my $join = join( "", map " LEFT JOIN $_ USING ( school_id ) ", qw( ofsted isi ) );
+    my $join = " LEFT JOIN ofsted ON ( school.ofsted_id = ofsted.ofsted_id ) ";
     my @where = @{$self->{where}};
     my $where = @where ? "WHERE " . join( " AND ", @where ) : '';
     my $sql = "SELECT $what $self->{from} $join $where";
