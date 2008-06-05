@@ -16,6 +16,8 @@ use Pod::Usage;
 use Getopt::Long;
 use Proc::Pidfile;
 use DBI;
+use lib "$Bin/lib";
+require CreateSchool;
 
 my %opts;
 my @opts = qw( flush type=s force silent pidfile! verbose );
@@ -24,6 +26,8 @@ my %types = (
     secondary => qr/secondary schools/i,
     independent => qr/independent education/i,
 );
+
+my ( $dbh, $sc );
 
 # Main
 
@@ -35,9 +39,9 @@ if ( $opts{pidfile} )
     $pp = Proc::Pidfile->new( silent => $opts{silent} );
 }
 my $logfile = "$Bin/logs/ofsted.log";
-my $dbh = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
-my $ssth = $dbh->prepare( "SELECT school_id FROM school WHERE postcode = ? AND name = ?" );
-my $rsth = $dbh->prepare( "REPLACE INTO ofsted ( school_id, ofsted_url, ofsted_school_id ) VALUES ( ?, ?, ? )" );
+$dbh = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
+$sc = CreateSchool->new( dbh => $dbh );
+my $rsth = $dbh->prepare( "REPLACE INTO ofsted ( ofsted_id, ofsted_url ) VALUES ( ?, ? )" );
 unless ( $opts{verbose} )
 {
     open( STDERR, ">>$logfile" ) or die "can't write to $logfile\n";
@@ -46,11 +50,8 @@ my $mech = WWW::Mechanize->new();
 for my $type ( keys %types )
 {
     $mech->get( 'http://www.ofsted.gov.uk/' );
-    warn $mech->uri, "\n";
     $mech->follow_link( text_regex => qr/inspection reports/i );
-    warn "\t", $mech->uri, "\n";
     $mech->follow_link( text_regex => $types{$type} );
-    warn "\t\t", $mech->uri, "\n";
     my $uri = $mech->uri;
     my $html = $mech->content();
     my ( $nreports ) = $html =~ /\(out of (\d+)\)/;
@@ -61,38 +62,36 @@ for my $type ( keys %types )
     );
     for my $link ( @links )
     {
-        my $url = $link->url_abs;
-        my $name = $link->text;
-        warn "\t\t\t$name ($url)\n";
+        my %school;
+        $school{url} = $link->url_abs;
+        $school{name} = $link->text;
+        warn "$type - $school{name}\n";
         eval {
-            $mech->get( $url );
+            warn "GET $school{url}\n";
+            $mech->get( $school{url} );
             my $html = $mech->content();
             die "no HTML\n" unless $html;
-            open( FH, ">foo" );
-            print FH $html;
-            close FH;
-            my ( $ofsted_id ) = $html =~ m{<th>Unique reference number</th>\s*<td>(\d+)</td>}sim;
-            die "no ofsted_id\n" unless $ofsted_id;
-            warn "ofsted_id: $ofsted_id\n";
-            my ( $address ) = $html =~ m{<p class="address">(.*?)</p>}sim;
-            die "no address\n" unless $address;
-            my ( $postcode ) = $address =~ m{<span class="line">([A-Z]+[0-9]+([A-Z]+)? [1-9]+[A-Z]+)\s*</span>};
-            die "no postcode\n" unless $postcode;
-            $postcode =~ s/\s*//g;
-            $ssth->execute( $postcode, $name );
-            my $school = $ssth->fetchrow_hashref();
-            die "can't find school for $name ($postcode)\n" unless $school;
-            warn "school: $school->{school_id}\n";
-            $rsth->execute( $school->{school_id}, $url, $ofsted_id );
+            ( $school{ofsted_id} ) = $html =~ m{<th>Unique reference number</th>\s*<td>(\d+)</td>}sim;
+            die "no ofsted_id\n" unless $school{ofsted_id};
+            warn "ofsted_id: $school{ofsted_id}\n";
+            ( $school{address} ) = $html =~ m{<p class="address">(.*?)</p>}sim;
+            die "no address\n" unless $school{address};
+            ( $school{postcode} ) = $school{address} =~ m{<span class="line">([A-Z0-9]+\s+[A-Z0-9A-Z]+)\s*</span>};
+            die "no postcode ($school{address})\n" unless $school{postcode};
+            $school{postcode} =~ s/\s*//g;
+            warn "POSTCODE: $school{postcode}\n";
+            $sc->create_school( 'ofsted_id', %school );
+            $rsth->execute( @school{qw(ofsted_id url)} );
         };
         if ( $@ )
         {
-            warn "$url FAILED: $@\n";
+            warn "$school{name} FAILED: $@\n";
         }
         else
         {
-            warn "$url SUCCESS\n";
+            warn "$school{name} SUCCESS\n";
         }
+        exit;
     }
 }
 print STDERR "$0 ($$) at ", scalar( localtime ), "\n";

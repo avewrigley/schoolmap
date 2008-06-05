@@ -1,13 +1,15 @@
--- MySQL dump 10.9
+-- MySQL dump 10.11
 --
 -- Host: localhost    Database: schoolmap
 -- ------------------------------------------------------
--- Server version	4.1.15-Debian_1-log
+-- Server version	5.0.32-Debian_7etch5-log
 
 /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
 /*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
 /*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
 /*!40101 SET NAMES utf8 */;
+/*!40103 SET @OLD_TIME_ZONE=@@TIME_ZONE */;
+/*!40103 SET TIME_ZONE='+00:00' */;
 /*!40014 SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0 */;
 /*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;
 /*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
@@ -32,7 +34,7 @@ CREATE TABLE `address` (
 DROP TABLE IF EXISTS `dfes`;
 CREATE TABLE `dfes` (
   `pupils_primary` int(11) default NULL,
-  `school_id` int(11) NOT NULL default '0',
+  `dfes_id` int(10) unsigned NOT NULL,
   `average_secondary` float default NULL,
   `pupils_secondary` float default NULL,
   `pupils_post16` int(11) default NULL,
@@ -43,46 +45,18 @@ CREATE TABLE `dfes` (
   `ks3_url` varchar(255) default '',
   `average_ks3` float default '0',
   `pupils_ks3` int(11) default '0',
-  `year` int(11) NOT NULL default '2005',
   `average_primary` float default NULL,
-  PRIMARY KEY  (`school_id`,`year`),
+  PRIMARY KEY  (`dfes_id`),
   KEY `urls` (`secondary_url`,`primary_url`),
   KEY `urls2` (`ks3_url`,`post16_url`),
-  KEY `py` (`primary_url`,`year`),
-  KEY `sy` (`secondary_url`,`year`),
-  KEY `ks3y` (`ks3_url`,`year`),
-  KEY `p16y` (`post16_url`,`year`),
+  KEY `py` (`primary_url`),
+  KEY `sy` (`secondary_url`),
+  KEY `ks3y` (`ks3_url`),
+  KEY `p16y` (`post16_url`),
   KEY `average_post16` (`average_post16`),
   KEY `average_ks3` (`average_ks3`),
   KEY `average_primary` (`average_primary`),
   KEY `average_secondary` (`average_secondary`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;
-
---
--- Table structure for table `isi`
---
-
-DROP TABLE IF EXISTS `isi`;
-CREATE TABLE `isi` (
-  `countycountry` varchar(100) NOT NULL default '',
-  `boarding_day` varchar(100) default '',
-  `town` varchar(100) NOT NULL default '',
-  `age_range` varchar(100) default '',
-  `school_id` int(11) NOT NULL default '0',
-  `isi_url` varchar(100) NOT NULL default '',
-  `gender` varchar(100) default '',
-  UNIQUE KEY `school_id` (`school_id`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;
-
---
--- Table structure for table `keystage`
---
-
-DROP TABLE IF EXISTS `keystage`;
-CREATE TABLE `keystage` (
-  `name` varchar(255) NOT NULL default '',
-  `age` int(11) NOT NULL default '0',
-  `description` varchar(255) NOT NULL default ''
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -91,11 +65,11 @@ CREATE TABLE `keystage` (
 
 DROP TABLE IF EXISTS `ofsted`;
 CREATE TABLE `ofsted` (
-  `school_id` int(11) NOT NULL default '0',
-  `ofsted_url` varchar(100) NOT NULL default '',
+  `ofsted_id` int(10) unsigned NOT NULL,
+  `ofsted_url` varchar(255) NOT NULL default '',
   `ofsted_school_id` int(11) NOT NULL default '0',
   PRIMARY KEY  (`ofsted_school_id`),
-  UNIQUE KEY `school_id` (`school_id`)
+  UNIQUE KEY `school_id` (`ofsted_id`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -123,36 +97,15 @@ CREATE TABLE `postcode` (
 DROP TABLE IF EXISTS `school`;
 CREATE TABLE `school` (
   `postcode` varchar(100) NOT NULL default '',
-  `school_id` int(10) unsigned NOT NULL auto_increment,
+  `dfes_id` int(10) unsigned NOT NULL default '0',
   `address` varchar(255) default '',
   `name` varchar(100) NOT NULL default '',
-  PRIMARY KEY  (`school_id`),
+  `ofsted_id` int(10) unsigned default NULL,
+  PRIMARY KEY  (`dfes_id`),
   UNIQUE KEY `postcode_name` (`postcode`,`name`),
-  KEY `postcode` (`postcode`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;
-
---
--- Table structure for table `school_type`
---
-
-DROP TABLE IF EXISTS `school_type`;
-CREATE TABLE `school_type` (
-  `school_id` int(11) NOT NULL default '0',
-  `type` varchar(255) NOT NULL default '',
-  PRIMARY KEY  (`school_id`,`type`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;
-
---
--- Table structure for table `source`
---
-
-DROP TABLE IF EXISTS `source`;
-CREATE TABLE `source` (
-  `name` varchar(255) NOT NULL default '',
-  `url` varchar(255) NOT NULL default '',
-  `description` varchar(255) NOT NULL default '',
-  PRIMARY KEY  (`name`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+  KEY `postcode` (`postcode`),
+  KEY `name` (`name`)
+) ENGINE=MyISAM AUTO_INCREMENT=108604 DEFAULT CHARSET=latin1;
 
 --
 -- Table structure for table `url`
@@ -165,6 +118,7 @@ CREATE TABLE `url` (
   `requested` datetime default NULL,
   PRIMARY KEY  (`url`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+/*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
 /*!40014 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS */;
@@ -174,3 +128,4 @@ CREATE TABLE `url` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
+-- Dump completed on 2008-06-05  9:54:07
