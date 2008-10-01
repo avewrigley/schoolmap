@@ -14,11 +14,16 @@ use lib "/var/www/www.schoolmap.org.uk/lib";
 require Schools;
 require CGI::Lite;
 
+my %mimetype = (
+    xml => "text/xml",
+    georss => "application/rss+xml",
+    kml => "application/vnd.google-earth.kml+xml",
+);
 open( STDERR, ">>/var/www/www.schoolmap.org.uk/logs/schools.log" );
 warn "$$ at ", scalar( localtime ), "\n";
 my %formdata = CGI::Lite->new->parse_form_data();
 warn map "$_ = $formdata{$_}\n", keys %formdata if %formdata;
-print "Content-Type: text/xml\n\n";
+print "Content-Type: $mimetype{$formdata{format}}\n\n";
 Schools->new( %formdata )->xml();
 
 #------------------------------------------------------------------------------

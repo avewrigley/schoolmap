@@ -17,6 +17,7 @@ sub new
     $self->{dbh} = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
     $self->{types} = {
         post16 => "GCE and VCE",
+        ks3 => "Key Stage 3",
         secondary => "GCSE",
         primary => "Key stage 2",
     };
@@ -35,9 +36,12 @@ sub get_tabs
     my $self = shift;
     my $school = shift;
     my $type = shift;
+    my $wiki_name = $school->{name};
+    $wiki_name =~ s/\s+/_/g;
+    $wiki_name =~ s/[^A-Za-z0-9_]//g;
     my $tabs = [
         { 
-            url => "http://en.wikipedia.org/wiki/$school->{name}", 
+            url => "http://en.wikipedia.org/wiki/$wiki_name", 
             description => "Wikipedia entry" 
         },
     ];
@@ -70,8 +74,6 @@ sub html
     my $school = $school_sth->fetchrow_hashref;
     $school_sth->finish();
     warn Dumper $school;
-    $school->{name} =~ s/\s+/_/g;
-    $school->{name} =~ s/[^A-Za-z0-9_]//g;
     my $key = $self->{type} ? "$self->{type}_url" : "$self->{table}_url";
     my $iframe_source = $school->{$key};
     warn "iframe_source: $key $iframe_source\n";

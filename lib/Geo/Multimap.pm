@@ -20,7 +20,7 @@ sub new
         or croak "Cannot connect: $DBI::errstr"
     ;
     $self->{ssth} = $self->{dbh}->prepare( "SELECT * FROM postcode WHERE code = ?" );
-    $self->{isth} = $self->{dbh}->prepare( "INSERT INTO postcode (code, lat, lon, x, y ) VALUES ( ?, ?, ?, ?, ? )" );
+    $self->{isth} = $self->{dbh}->prepare( "INSERT INTO postcode (code, lat, lon ) VALUES ( ?, ?, ? )" );
     return $self;
 }
 
@@ -57,7 +57,7 @@ sub get_text_nodes
     return @tnodes;
 }
 
-my $multimap_url = "http://www.multimap.com/map/browse.cgi?client=public&search_result=&db=pc&cidr_client=none&lang=&pc=";
+my $multimap_url = "http://www.multimap.com/maps/?&hloc=GB|";
 
 sub coords
 {
@@ -104,40 +104,20 @@ sub find
     my $output = $self->db_find( $postcode );
     return %$output if $output;
     my $url = "$multimap_url$postcode";
-    my ( $x, $y, $lat, $lon );
     my $html = get( $url );
-    warn "failed to get $url\n" and return unless $html;
-    for ( get_text_nodes( $html, _tag => 'dd' ) )
-    {
-        if ( /^(\d+)m$/ )
-        {
-            if ( defined( $x ) )
-            {
-                $y = $1;
-            }
-            else
-            {
-                $x = $1;
-            }
-
-        }
-        if ( /\d{1,2}:\d{1,2}:\d{1,2}[NS] \((-?[0-9.]+)\)/ )
-        {
-            $lat = $1;
-        }
-        elsif ( /\d{1,2}:\d{1,2}:\d{1,2}[EW] \((\-?[0-9.]+)\)/ )
-        {
-            $lon = $1;
-        }
-    }
-    unless ( defined( $lat ) && defined( $lon ) && defined( $x ) && defined( $y ) )
+    open( FH, ">foo" );
+    my ( $lat ) = $html =~ qr{<span class="latitude">([\-0-9\.]+)</span>}smi;
+    warn "lat: $lat\n";
+    my ( $lon ) = $html =~ qr{<span class="longitude">([\-0-9\.]+)</span>}smi;
+    warn "lon: $lon\n";
+    unless ( defined( $lat ) && defined( $lon ) )
     {
         warn "can't get coords for $postcode from $url\n";
         return;
     }
     warn "found coords $lat,$lon for $postcode from $url\n";
-    $self->{isth}->execute( $postcode, $lat, $lon, $x, $y );
-    return ( code => $postcode, lat => $lat, lon => $lon, x => $x, y => $y );
+    $self->{isth}->execute( $postcode, $lat, $lon );
+    return ( code => $postcode, lat => $lat, lon => $lon );
 }
 
 #------------------------------------------------------------------------------
