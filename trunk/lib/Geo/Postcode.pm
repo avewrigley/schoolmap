@@ -13,7 +13,8 @@ use DBI;
 sub new
 {
     my $class = shift;
-    my $self = bless {}, $class;
+    my %args = @_;
+    my $self = bless \%args, $class;
     $self->{dbh} = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap' )
         or croak "Cannot connect: $DBI::errstr"
     ;
@@ -52,8 +53,36 @@ sub find
         warn "found coords $output->{lat},$output->{lon} in db for $postcode\n";
         return %{$output};
     }
+    if ( $self->{backoff} )
+    {
+        while ( length( $postcode ) >= 3 )
+        {
+            chop( $postcode );
+            warn "backing off to $postcode\n";
+            $sth->execute( $postcode );
+            $output = $sth->fetchrow_hashref;
+            if ( $output )
+            {
+                warn "found coords $output->{lat},$output->{lon} in db for $postcode\n";
+                return %{$output};
+            }
+        }
+    }
     warn "no entry in db for $postcode\n";
     return;
+}
+
+sub add
+{
+    my $self = shift;
+    my $pc = shift;
+    my $lat = shift;
+    my $lon = shift;
+
+    my $postcode = uc( $pc );
+    $postcode =~ s/\s*//g;
+    my $sth = $self->{dbh}->prepare( "REPLACE INTO postcode ( code, lat, lon ) VALUES ( ?,?,? )" );
+    $sth->execute( $postcode, $lat, $lon );
 }
 
 #------------------------------------------------------------------------------

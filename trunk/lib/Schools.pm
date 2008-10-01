@@ -51,14 +51,6 @@ sub schools_xml
     my $self = shift;
     my @args;
     my @what = ( "*" );
-    if ( $self->{centreX} && $self->{centreY} )
-    {
-        push( 
-            @what, 
-            "GLength(LineStringFromWKB(LineString(AsBinary(GeomFromText(?)), AsBinary(postcode.location)))) AS distance",
-        );
-        push( @args, "POINT( $self->{centreX} $self->{centreY} )" );
-    }
     my $what = join( ",", @what );
     my @where = ( "school.postcode = postcode.code" );
     if ( $self->{minLon} && $self->{maxLon} && $self->{minLat} && $self->{maxLat} )
@@ -89,14 +81,7 @@ EOF
     $self->{format} ||= "xml";
     if ( $self->{order_by} )
     {
-        if ( $self->{order_by} eq 'distance' )
-        {
-            $sql .= " ORDER BY distance";
-        }
-        else
-        {
-            $sql .= " ORDER BY average_$self->{order_by} DESC";
-        }
+        $sql .= " ORDER BY average_$self->{order_by} DESC";
     }
     my $limit = 50;
     $limit = $self->{limit} if defined $self->{limit};
