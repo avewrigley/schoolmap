@@ -7,7 +7,7 @@ var default_zoom = 6;
 var address_zoom = 12;
 var max_zoom = 15;
 var place;
-var schools_url = "schools";
+var schools_url = "schools.xml";
 var school_url = "school";
 var icon_root_url = 'http://bluweb.com/us/chouser/gmapez/iconEZ2/';
 
@@ -38,7 +38,6 @@ function createAddressMarker()
     if ( ! place ) return;
     var marker = new GMarker( place.point );
     map.addOverlay( marker );
-    // marker.openInfoWindowHtml( place.address );
     return marker;
 }
 
@@ -78,27 +77,27 @@ function getAddress()
 
 function createLinkTo( query_string )
 {
-    var txt = document.createTextNode( "link to this page:" );
     var url = document.URL;
     url = url.replace( /\?.*$/, "" );
     var url = url + "?" + query_string;
     var link1 = document.createElement( "A" );
     link1.href = url;
-    link1.appendChild( document.createTextNode( "HTML" ) );
+    setText( link1, "HTML" );
     var link2 = document.createElement( "A" );
     url = schools_url + "?" + query_string;
     link2.href = url;
-    link2.appendChild( document.createTextNode( "XML" ) );
+    setText( link2, "XML" );
     var link3 = document.createElement( "A" );
     url = schools_url + "?" + query_string + "&format=georss";
     link3.href = url;
-    link3.appendChild( document.createTextNode( "GeoRSS" ) );
+    setText( link3, "GeoRSS" );
     var link4 = document.createElement( "A" );
     url = schools_url + "?" + query_string + "&format=kml";
     link4.href = url;
-    link4.appendChild( document.createTextNode( "KML" ) );
+    setText( link4, "KML" );
     linkToDiv = document.getElementById( "linkto" );
     removeChildren( linkToDiv );
+    var txt = document.createTextNode( "link to this page:" );
     linkToDiv.appendChild( txt );
     linkToDiv.appendChild( link1 );
     linkToDiv.appendChild( document.createTextNode( " | " ) );
@@ -177,11 +176,19 @@ function getSchoolsCallback( xmlDoc )
 function getXML( url, callback )
 {
     setCursor( "wait" );
-    if ( request ) request.abort();
-    request = createXMLHttpRequest();
+    if ( request )
+    {
+        console.log( "abort " + request );
+        request.abort();
+    }
+    request = new XMLHttpRequest();
+    // why is ie so crap?
+    url = url + "&.xml";
     request.open( 'GET', url, true );
     request.onreadystatechange = function() {
         if ( request.readyState != 4 ) return;
+        if ( request.status == 0 ) return; // aborted request
+        setCursor( "default" );
         if ( request.status == 200 )
         {
             var xmlDoc = request.responseXML;
@@ -189,7 +196,7 @@ function getXML( url, callback )
         }
         else
         {
-            console.error( "GET " + url + " failed" );
+            console.error( "GET " + url + " failed: " + request.status );
         }
         request = false;
     };
@@ -297,45 +304,71 @@ function activateSchool( school )
     school.marker.active = true;
 }
 
-function markerMouseoverCallback( school ) 
+function markerMouseoutCallback( school ) 
 {
-    changeLinksColour( school.links, "red" );
+    deActivateSchool( school );
 }
 
-function updateDistance( school )
+function markerMouseoverCallback( school ) 
+{
+    activateSchool( school );
+}
+
+function calculateAllDistances()
+{
+    for ( var i = 0; i < schools.length; i++ )
+    {
+        if ( !  schools[i].meters ) calculateDistance( schools[i] );
+    }
+}
+
+function setText( e, t )
+{
+    empty( e );
+    e.appendChild( document.createTextNode( t ) );
+}
+
+function calculateDistance( school )
 {
     if ( ! place ) return;
+    if ( school.meters ) return;
+    setText( school.distance_link, "calclulating ..." )
+    var postcode = school.postcode.replace( /([A-Z]+\d+)(\d[A-Z]+.*)/, "$1 $2" );
+    console.log( "postcode: " + school.postcode + " : " + postcode );
+    var from = school.address + ", " + postcode;
+    var to = place.address;
+    console.log( "get directions from " + from + " to " + to );
     try {
-        if ( school.marker.isHidden() )
-        {
-            console.log( school.address + " is hidden" );
-            return;
-        }
-        var from = school.address;
-        var to = place.address;
-        console.log( "get directions from " + from + " to " + to );
         gdir[school.code].load( 
             "from " + from + " to " + to,
             { preserveViewport:true, travelMode:"walking" }
         );
-        if ( handle[school.code] ) GEvent.removeListener( handle[school.code] );
-        handle[school.code] = GEvent.addListener( gdir[school.code], "load", function() { 
-            console.log( "got directions" );
-            var nroutes = gdir[school.code].getNumRoutes();
-            console.log( "nroutes = " + nroutes );
-            if ( nroutes == -1 ) return;
-            var route = gdir[school.code].getRoute( 0 );
-            console.log( "route: " + route );
-            var distance = route.getDistance();
-            console.log( "distance: " + distance.meters );
-            var a = school.distance_link;
-            if ( typeof( distance.meters ) == "number" )
-            {
-                empty( a );
-                a.appendChild( document.createTextNode( distance.meters + " meters" ) );
-            }
+        if ( handle[school.code] )
+        {
+            console.log( "remove listener for " + school.name );
             GEvent.removeListener( handle[school.code] );
-            handle = false;
+        }
+        handle[school.code] = GEvent.addListener( gdir[school.code], "load", function() { 
+            console.log( school.name + " route loaded" );
+            setText( school.distance_link, "done ..." )
+            try {
+                var nroutes = gdir[school.code].getNumRoutes();
+                if ( nroutes >= 0 )
+                {
+                    var route = gdir[school.code].getRoute( 0 );
+                    var distance = route.getDistance();
+                    if ( typeof( distance.meters ) == "number" )
+                    {
+                        school.meters = distance.meters;
+                        setText( school.distance_link, school.meters + " meters" );
+                    }
+                }
+            } catch( e ) {
+                console.error( school.name + " route calculation failed: " + e.message );
+            }
+            gdir[school.code].clear();
+            GEvent.removeListener( handle[school.code] );
+            handle[school.code] = false;
         } );
     } catch( e ) {
         console.error( e.message );
@@ -349,8 +382,17 @@ function createSchoolMarker( school, colour )
         school.letter = getLetter( school.name );
         var point = new GLatLng( school.lat, school.lon );
         var marker = createMarker( school.letter, colour, point );
-        GEvent.addListener( marker, "mouseout", function() { changeLinksColour( school.links, "blue" ) } );
+        GEvent.addListener( marker, "mouseout", function() { markerMouseoutCallback( school ) } );
         GEvent.addListener( marker, "mouseover", function() { markerMouseoverCallback( school ) } );
+        GEvent.addListener( 
+            marker, 
+            "click", 
+            function() {
+                var html = "<h2>" + school.name + "</h2>";
+                html = html + "<p>" + school.address + "," + school.postcode + "</p>";
+                marker.openInfoWindowHtml( html );
+            } 
+        );
         marker.school = school;
         school.marker = marker;
         school.point = point;
@@ -477,7 +519,6 @@ function createListTd( opts )
         var school = opts.school;
         if ( ! school.links ) school.links = new Array();
         school.links.push( a );
-        a.style.color = "blue";
         a.appendChild( document.createTextNode( opts.text ) );
         td.appendChild( a );
         a.onmouseover = function() {
@@ -495,14 +536,21 @@ function createListTd( opts )
     return td;
 }
 
-function createDistanceTd( opt )
+function createDistanceTd( opts )
 {
     var td = document.createElement( "TD" );
     var a = document.createElement( "A" );
-    a.onclick = function() { opt.onclick( opt.school ); };
-    a.style.color = "blue";
-    a.appendChild( document.createTextNode( opt.text ) );
-    opt.school.distance_link = a;
+    a.onclick = function() { opts.onclick( opts.school ); };
+    a.onmouseover = function() {
+        activateSchool( opts.school );
+    };
+    a.onmouseout = function() {
+        deActivateSchool( opts.school );
+    };
+    a.appendChild( document.createTextNode( opts.text ) );
+    if ( ! opts.school.links ) opts.school.links = new Array();
+    opts.school.links.push( a );
+    opts.school.distance_link = a;
     td.appendChild( a );
     return td;
 }
@@ -525,12 +573,13 @@ function empty( elem )
 function createListRow( no, school )
 {
     var tr = document.createElement( "TR" );
-    tr.appendChild( createListTd( { text:no+1, url:url, school:school } ) );
-    tr.appendChild( createListTd( { text:school.name, url:url, school:school } ) );
+    var url = school_url + "?table=dfes&id=" + school.dfes_id;
+    tr.appendChild( createListTd( { "text":no+1, "url":url, "school":school } ) );
+    tr.appendChild( createListTd( { "text":school.name, "url":url, "school":school } ) );
     if ( school.ofsted_url ) 
     {
         var url = school_url + "?table=ofsted&id=" + school.ofsted_id;
-        tr.appendChild( createListTd( { text:"yes", url:url, school:school } ) );
+        tr.appendChild( createListTd( { "text":"yes", "url":url, "school":school } ) );
     }
     else
     {
@@ -544,18 +593,18 @@ function createListRow( no, school )
         {
             var val = school[ave];
             var url = school_url + "?table=dfes&type=" + keystage.name + "&id=" + school.dfes_id;
-            var td = createListTd( { text:val, url:url, school:school } );
+            var td = createListTd( { "text":val, "url":url, "school":school } );
         }
         else
         {
-            var td = createListTd( { text:"-" } );
+            var td = createListTd( { "text":"-" } );
         }
         td.noWrap = true;
         tr.appendChild( td );
     }
     if ( place )
     {
-        var td = createDistanceTd( { text:"[ calculate ]", school:school, onclick:updateDistance } );
+        var td = createDistanceTd( { text:"[ calculate ]", school:school, onclick:calculateDistance } );
         td.style.whiteSpace = "nowrap";
         tr.appendChild( td );
     }
@@ -569,7 +618,7 @@ symbols = {
 function getSymbol( label )
 {
     var span = document.createElement( "SPAN" );
-    span.appendChild( document.createTextNode( symbols[label] ) );
+    setText( span, symbols[label] );
     span.fontWeight = "bold";
     span.fontSize = "200%";
     return span;
@@ -589,7 +638,7 @@ function createHeadCell( tr, name, title )
     a.style.textDecoration = "none";
     a.href = "";
     a.onclick = function() { return false; };
-    a.appendChild( document.createTextNode( name ) );
+    setText( a, name );
 }
 
 var handle = {};
@@ -610,7 +659,26 @@ function createListTable()
         var tr = createListRow( i, school );
         tbody.appendChild( tr );
         gdir[school.code] = new GDirections( map );
-        // updateDistance( school );
+    }
+    var ncells = tr.childNodes.length;
+    console.log( "ncells = " + ncells );
+    if ( place )
+    {
+        var tr = document.createElement( "TR" );
+        tbody.appendChild( tr );
+        for ( var i = 0; i < ncells-1; i++ )
+        {
+            var td = document.createElement( "TD" );
+            tr.appendChild( td );
+        }
+        var td = document.createElement( "TD" );
+        td.style.whiteSpace = "nowrap";
+        tr.appendChild( td );
+        var a = document.createElement( "A" );
+        setText( a, "[ calculate all ]" );
+        a.onclick = calculateAllDistances;
+        listDiv.appendChild( document.createElement( "BR" ) );
+        td.appendChild( a );
     }
     return table;
 }
@@ -622,8 +690,8 @@ function getIconUrl( letter, colour )
 
 function changeMarkerColour( marker, colour )
 {
-    createSchoolMarker( marker.school, colour );
-    map.removeOverlay( marker );
+    var image = getIconUrl( marker.school.letter, colour );
+    marker.setImage( image );
 }
 
 function changeLinksColour( links, color )

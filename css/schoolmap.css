@@ -14,3 +14,12 @@ body,td,option,p,input,textarea {
 hr { border-top: gray solid 1px; border-bottom: 0px; width: 100% }
 img { border: 0px }
 .small { font-size: xx-small }
+
+a {
+    text-decoration: none;
+    color: blue;
+}
+
+a:hover {
+    color: red;
+}
