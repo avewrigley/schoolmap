@@ -15,7 +15,7 @@ sub new
     my %args = @_;
     my $self = bless \%args, $class;
     $self->{dbh} = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
-    $self->{types} = {
+    $self->{dfes_types} = {
         post16 => "GCE and VCE",
         ks3 => "Key Stage 3",
         secondary => "GCSE",
@@ -29,6 +29,19 @@ sub DESTROY
 {
     my $self = shift;
     $self->{dbh}->disconnect();
+}
+
+sub get_types
+{
+    my $self = shift;
+    my $school = shift;
+    my @types;
+    for my $url_type ( "ofsted", keys %{$self->{dfes_types}} )
+    {
+        my $key = "${url_type}_url";
+        push( @types, $url_type ) if $school->{$key};
+    }
+    return @types;
 }
 
 sub get_tabs
@@ -45,7 +58,7 @@ sub get_tabs
             description => "Wikipedia entry" 
         },
     ];
-    for my $url_type ( "ofsted", keys %{$self->{types}} )
+    for my $url_type ( $self->get_types( $school ) )
     {
         my $key = "${url_type}_url";
         warn "$url_type ($type - $key) TAB\n";
@@ -54,7 +67,7 @@ sub get_tabs
             warn "ADD A $url_type TAB\n";
             push( @$tabs, {
                     url => $url,
-                    description => $self->{types}{$url_type} || "Ofsted",
+                    description => $self->{dfes_types}{$url_type} || "Ofsted",
                     current => $url_type eq $type
                 }
             );
@@ -74,7 +87,9 @@ sub html
     my $school = $school_sth->fetchrow_hashref;
     $school_sth->finish();
     warn Dumper $school;
-    my $key = $self->{type} ? "$self->{type}_url" : "$self->{table}_url";
+    $self->{type} = ( $self->get_types( $school ) )[0] unless $self->{type};
+    my $key = "$self->{type}_url";
+    warn "key: $key\n";
     my $iframe_source = $school->{$key};
     warn "iframe_source: $key $iframe_source\n";
     my $tabs = $self->get_tabs( $school, $self->{type} || $self->{table} );

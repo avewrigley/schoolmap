@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://earth.google.com/kml/2.2">
+    <Document>
+[% FOREACH school IN schools %]
+        <Placemark>
+            <name>[% school.name | html %]</name>
+            <description>[% school.address | html %]</description>
+            <Point>
+                <coordinates>[% school.lon %],[% school.lat %]</coordinates>
+            </Point>
+        </Placemark>
+[% END %]
+</Document>
+</kml>

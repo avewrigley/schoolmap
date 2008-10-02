@@ -53,6 +53,10 @@ sub schools_xml
     my @what = ( "*" );
     my $what = join( ",", @what );
     my @where = ( "school.postcode = postcode.code" );
+    if ( $self->{order_by} )
+    {
+        push( @where, "average_$self->{order_by} IS NOT NULL" );
+    }
     if ( $self->{minLon} && $self->{maxLon} && $self->{minLat} && $self->{maxLat} )
     {
         push( 

@@ -23,7 +23,8 @@ open( STDERR, ">>/var/www/www.schoolmap.org.uk/logs/schools.log" );
 warn "$$ at ", scalar( localtime ), "\n";
 my %formdata = CGI::Lite->new->parse_form_data();
 warn map "$_ = $formdata{$_}\n", keys %formdata if %formdata;
-print "Content-Type: $mimetype{$formdata{format}}\n\n";
+my $mimetype = $mimetype{$formdata{format}} || "text/xml";
+print "Content-Type: $mimetype\n\n";
 Schools->new( %formdata )->xml();
 
 #------------------------------------------------------------------------------

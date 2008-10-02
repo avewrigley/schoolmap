@@ -20,7 +20,7 @@
                         href="[% tab.url %]"
                         onclick="
                             try {
-                                var current = YAHOO.util.Dom.getElementsByClassName( 'current' );
+                                var current = document.getElementsByClassName( 'current' );
                                 current[0].className = '';
                                 this.className = 'current';
                             }
