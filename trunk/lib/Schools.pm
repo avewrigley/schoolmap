@@ -7,6 +7,7 @@ use Carp;
 use HTML::Entities qw( encode_entities );
 use Template;
 use Data::Dumper;
+use JSON;
 
 sub new
 {
@@ -18,12 +19,6 @@ sub new
     $self->{dbh} = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
     $self->{tt} = Template->new( { INCLUDE_PATH => "/var/www/www.schoolmap.org.uk/templates" } );
     return $self;
-}
-
-sub xml
-{
-    my $self = shift;
-    $self->schools_xml();
 }
 
 my %label = (
@@ -46,7 +41,22 @@ sub process_template
     $self->{tt}->process( $template, $params, \*STDERR );
 }
 
-sub schools_xml
+sub json
+{
+    my $self = shift;
+    my $schools = $self->get_schools();
+    print to_json( $schools );
+}
+
+sub xml
+{
+    my $self = shift;
+    my $schools = $self->get_schools();
+    $self->{format} ||= "xml";
+    $self->process_template( "school.$self->{format}", $schools );
+}
+
+sub get_schools
 {
     my $self = shift;
     my @args;
@@ -82,7 +92,6 @@ SELECT SQL_CALC_FOUND_ROWS $what FROM postcode, school
     LEFT JOIN dfes ON ( school.dfes_id = dfes.dfes_id )
     $where
 EOF
-    $self->{format} ||= "xml";
     if ( $self->{order_by} )
     {
         $sql .= " ORDER BY average_$self->{order_by} DESC";
@@ -104,10 +113,7 @@ EOF
     $sth->execute();
     my ( $nschools ) = $sth->fetchrow();
     warn "NROWS: $nschools\n";
-    $self->process_template( 
-        "school.$self->{format}", 
-        { nschools => $nschools, schools => \@schools }
-    );
+    return { nschools => $nschools, schools => \@schools };
 }
 
 1;

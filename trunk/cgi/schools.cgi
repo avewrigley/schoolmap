@@ -18,14 +18,23 @@ my %mimetype = (
     xml => "text/xml",
     georss => "application/rss+xml",
     kml => "application/vnd.google-earth.kml+xml",
+    # json => "application/json",
+    json => "text/plain",
 );
 open( STDERR, ">>/var/www/www.schoolmap.org.uk/logs/schools.log" );
 warn "$$ at ", scalar( localtime ), "\n";
-my %formdata = CGI::Lite->new->parse_form_data();
+my %formdata = ( format => "json", CGI::Lite->new->parse_form_data() );
 warn map "$_ = $formdata{$_}\n", keys %formdata if %formdata;
-my $mimetype = $mimetype{$formdata{format}} || "text/xml";
+my $mimetype = $mimetype{$formdata{format}};
 print "Content-Type: $mimetype\n\n";
-Schools->new( %formdata )->xml();
+if ( $formdata{format} eq 'json' )
+{
+    Schools->new( %formdata )->json();
+}
+else
+{
+    Schools->new( %formdata )->xml();
+}
 
 #------------------------------------------------------------------------------
 #

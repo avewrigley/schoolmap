@@ -7,11 +7,11 @@ var default_zoom = 6;
 var address_zoom = 12;
 var max_zoom = 15;
 var place;
-var schools_url = "schools.xml";
+var schools_url = "schools";
 var school_url = "school";
-var icon_root_url = 'http://bluweb.com/us/chouser/gmapez/iconEZ2/';
 
 var schools;
+var nschools = 0;
 var params = new Object();
 var keystages = new Array();
 
@@ -20,6 +20,43 @@ var request = false;
 var symbols = new Object();
 var curtags = [ "body", "a", "input", "select", "div" ];
 var listDiv;
+var blue = "4444ff";
+var red = "ff4444";
+var gdir;
+var handle_load = false;
+var handle_error = false;
+var handle_zoom = false;
+var handle_move = false;
+
+var layer_config = {
+    panoramio: "com.panoramio.all",
+    "panoramio (popular)": "com.panoramio.popular",
+    wikipedia: "org.wikipedia.en"
+};
+
+var layers = new Object();
+
+function setMapListeners()
+{
+    handle_zoom = GEvent.addListener( map, "zoomend", getSchools );
+    handle_move = GEvent.addListener( map, "moveend", getSchools );
+}
+
+function removeMapListeners()
+{
+    if ( handle_zoom )
+    {
+        console.log( "remove zoom listener" );
+        GEvent.removeListener( handle_zoom );
+        handle_zoom = false;
+    }
+    if ( handle_move )
+    {
+        console.log( "remove move listener" );
+        GEvent.removeListener( handle_move );
+        handle_move = false;
+    }
+}
 
 function clearAddress()
 {
@@ -63,10 +100,6 @@ function getAddress()
             }
             place = response.Placemark[0];
             var point = place.point = place2point( place );
-            document.forms[1].x.value = point.x;
-            document.forms[1].y.value = point.y;
-            document.forms[1].lon.value = point.lng();
-            document.forms[1].lat.value = point.lat();
             createAddressMarker();
             map.setCenter( point );
             map.setZoom( address_zoom );
@@ -79,33 +112,39 @@ function createLinkTo( query_string )
 {
     var url = document.URL;
     url = url.replace( /\?.*$/, "" );
-    var url = url + "?" + query_string;
-    var link1 = document.createElement( "A" );
-    link1.href = url;
-    setText( link1, "HTML" );
+    // var url = url + "?" + query_string;
+    // var link1 = document.createElement( "A" );
+    // link1.href = url;
+    // setText( link1, "HTML" );
     var link2 = document.createElement( "A" );
-    url = schools_url + "?" + query_string;
+    url = schools_url + ".xml?" + query_string + "&format=xml";
     link2.href = url;
     setText( link2, "XML" );
     var link3 = document.createElement( "A" );
-    url = schools_url + "?" + query_string + "&format=georss";
+    url = schools_url + ".rss?" + query_string + "&format=georss";
     link3.href = url;
     setText( link3, "GeoRSS" );
     var link4 = document.createElement( "A" );
-    url = schools_url + "?" + query_string + "&format=kml";
+    url = schools_url + ".kml?" + query_string + "&format=kml";
     link4.href = url;
     setText( link4, "KML" );
+    var link5 = document.createElement( "A" );
+    url = schools_url + "?" + query_string + "&format=json";
+    link5.href = url;
+    setText( link5, "JSON" );
     linkToDiv = document.getElementById( "linkto" );
     removeChildren( linkToDiv );
     var txt = document.createTextNode( "link to this page:" );
     linkToDiv.appendChild( txt );
-    linkToDiv.appendChild( link1 );
-    linkToDiv.appendChild( document.createTextNode( " | " ) );
+    // linkToDiv.appendChild( link1 );
+    // linkToDiv.appendChild( document.createTextNode( " | " ) );
     linkToDiv.appendChild( link2 );
     linkToDiv.appendChild( document.createTextNode( " | " ) );
     linkToDiv.appendChild( link3 );
     linkToDiv.appendChild( document.createTextNode( " | " ) );
     linkToDiv.appendChild( link4 );
+    linkToDiv.appendChild( document.createTextNode( " | " ) );
+    linkToDiv.appendChild( link5 );
 }
 
 function removeChildren( parent )
@@ -140,7 +179,43 @@ function getOptions( sel )
     return options;
 }
 
+function setZoomLevel()
+{
+    var bounds = new GLatLngBounds();
+    for ( var i = 0; i < schools.length; i++ )
+    {
+        var school = schools[i];
+        console.log( school + " (" + school.lat + "," + school.lon + ")" );
+        var point = new GLatLng( school.lat, school.lon );
+        bounds.extend( point );
+    }
+    var centre = bounds.getCenter();
+    var zoom = map.getBoundsZoomLevel( bounds );
+    removeMapListeners();
+    // console.log( "set centre to " + centre );
+    // map.setCenter( centre );
+    // console.log( "set zoom to " + zoom );
+    // map.setZoom( zoom );
+    setMapListeners();
+}
+
 function getSchoolsCallback( xmlDoc )
+{
+    try {
+        var doc = xmlDoc.documentElement;
+        var docObj = xml2obj( doc );
+        nschools = docObj.nschools;
+        var schoolXmlArray = doc.getElementsByTagName( "school" );
+        for ( var i = 0; i < schoolXmlArray.length; i++ )
+        {
+            var school = xml2obj( schoolXmlArray[i] );
+            schools.push( school );
+        }
+        updateSchools();
+    } catch( e ) { console.log( e.message ) }
+}
+
+function updateSchools()
 {
     try {
         var body = document.getElementsByTagName( "body" );
@@ -148,29 +223,23 @@ function getSchoolsCallback( xmlDoc )
         map.clearOverlays();
         removeChildren( listDiv );
         googleDiv.innerHTML = google_html;
-        var doc = xmlDoc.documentElement;
-        var docObj = xml2obj( doc );
-        var nschools = docObj.nschools;
-        var schoolXmlArray = doc.getElementsByTagName( "school" );
-        for ( var i = 0; i < schoolXmlArray.length; i++ )
+        for ( var i = 0; i < schools.length; i++ )
         {
-            var school = xml2obj( schoolXmlArray[i] );
-            schools.push( school );
-            createSchoolMarker( school, "blue" );
+            createSchoolMarker( schools[i], blue );
         }
-        if ( schoolXmlArray.length )
+        if ( schools.length )
         {
             listDiv.appendChild( createListTable() );
         }
         else
         {
-            setStatus( "there are no schools on this map" ); 
+            setStatus( "there are no schools on this map - zoom out" ); 
         }
         if ( place ) createAddressMarker();
+        var b = document.createElement( "B" );
+        b.appendChild( document.createTextNode( schools.length + " / " + nschools + " schools" ) );
+        listDiv.appendChild( b );
     } catch( e ) { console.log( e.message ) }
-    var b = document.createElement( "B" );
-    b.appendChild( document.createTextNode( schools.length + " / " + nschools + " schools" ) );
-    listDiv.appendChild( b );
 }
 
 function getXML( url, callback )
@@ -199,6 +268,26 @@ function getXML( url, callback )
             console.error( "GET " + url + " failed: " + request.status );
         }
         request = false;
+    };
+    request.send( null );
+}
+
+function getJSON( url, callback )
+{
+    setCursor( "wait" );
+    if ( request )
+    {
+        console.log( "abort " + request );
+        request.abort();
+    }
+    request = new XMLHttpRequest();
+    request.open( 'GET', url, true );
+    request.onreadystatechange = function() {
+        if ( request.readyState != 4 ) return;
+        if ( request.status == 0 ) return; // aborted request
+        setCursor( "default" );
+        if ( request.status == 200 ) callback( request );
+        else console.error( "GET " + url + " failed: " + request.status );
     };
     request.send( null );
 }
@@ -256,7 +345,15 @@ function getSchools()
     schools = new Array();
     var url = schools_url + "?" + query_string;
     createLinkTo( query_string );
-    getXML( url, getSchoolsCallback );
+    // getXML( url, getSchoolsCallback );
+    getJSON( url, getJSONCallback );
+}
+
+function getJSONCallback( response ) {
+    var json = JSON.parse( response.responseText );
+    nschools = json.nschools;
+    schools = json.schools;
+    updateSchools();
 }
 
 function xml2obj( xml )
@@ -272,9 +369,10 @@ function xml2obj( xml )
 
 function createIcon( letter, colour )
 {
-    var icon = new GIcon( G_DEFAULT_ICON );
-    var image = getIconUrl( letter, colour );
-    icon.image = image;
+    var icon = MapIconMaker.createLabeledMarkerIcon(
+        { primaryColor: "#" + colour, label: letter }
+    );
+    icon.colour = colour;
     return icon;
 }
 
@@ -290,16 +388,16 @@ var active_school;
 
 function deActivateSchool( school )
 {
-    changeLinksColour( school.links, "blue" )
-    changeMarkerColour( school.marker, "blue" )
+    changeLinksColour( school.links, blue )
+    changeMarkerColour( school.marker, blue )
     active_school = school;
     school.marker.active = false;
 }
 
 function activateSchool( school )
 {
-    changeLinksColour( school.links, "red" )
-    changeMarkerColour( school.marker, "red" )
+    changeLinksColour( school.links, red )
+    changeMarkerColour( school.marker, red )
     if ( active_school ) deActivateSchool( active_school );
     school.marker.active = true;
 }
@@ -328,48 +426,69 @@ function setText( e, t )
     e.appendChild( document.createTextNode( t ) );
 }
 
+function removeDistanceListeners()
+{
+    if ( handle_error )
+    {
+        console.log( "remove error listener" );
+        GEvent.removeListener( handle_error );
+        handle_error = false;
+    }
+    if ( handle_load )
+    {
+        console.log( "remove load listener" );
+        GEvent.removeListener( handle_load );
+        handle_load = false;
+    }
+}
+
+function convertMeters( m )
+{
+    if ( m < 1000 ) return m + " m";
+    var km = m / 1000;
+    return km + " km";
+}
 function calculateDistance( school )
 {
     if ( ! place ) return;
-    if ( school.meters ) return;
+    console.log( "calclulate distance for " + school.name )
     setText( school.distance_link, "calclulating ..." )
-    var postcode = school.postcode.replace( /([A-Z]+\d+)(\d[A-Z]+.*)/, "$1 $2" );
-    console.log( "postcode: " + school.postcode + " : " + postcode );
-    var from = school.address + ", " + postcode;
+    var from = school.lat + "," + school.lon;
     var to = place.address;
-    console.log( "get directions from " + from + " to " + to );
+    school.directions_text = "from " + from + " to " + to;
+    console.log( "get directions:" + school.directions_text );
+    gdir.clear();
     try {
-        gdir[school.code].load( 
-            "from " + from + " to " + to,
-            { preserveViewport:true, travelMode:"walking" }
-        );
-        if ( handle[school.code] )
-        {
-            console.log( "remove listener for " + school.name );
-            GEvent.removeListener( handle[school.code] );
-        }
-        handle[school.code] = GEvent.addListener( gdir[school.code], "load", function() { 
+        removeDistanceListeners();
+        handle_load = GEvent.addListener( gdir, "load", function( obj ) { 
             console.log( school.name + " route loaded" );
             setText( school.distance_link, "done ..." )
             try {
-                var nroutes = gdir[school.code].getNumRoutes();
+                var nroutes = obj.getNumRoutes();
                 if ( nroutes >= 0 )
                 {
-                    var route = gdir[school.code].getRoute( 0 );
+                    var route = obj.getRoute( 0 );
                     var distance = route.getDistance();
                     if ( typeof( distance.meters ) == "number" )
                     {
                         school.meters = distance.meters;
-                        setText( school.distance_link, school.meters + " meters" );
+                        setText( school.distance_link, convertMeters( school.meters ) );
                     }
                 }
             } catch( e ) {
                 console.error( school.name + " route calculation failed: " + e.message );
             }
-            gdir[school.code].clear();
-            GEvent.removeListener( handle[school.code] );
-            handle[school.code] = false;
+            removeDistanceListeners();
         } );
+        handle_error = GEvent.addListener( gdir, "error", function( obj ) { 
+            console.log( "error: " + obj.getStatus().code );
+            setText( school.distance_link, "error" )
+            removeDistanceListeners();
+        } );
+        gdir.load( 
+            school.directions_text,
+            { preserveViewport:true, travelMode:"walking" }
+        );
     } catch( e ) {
         console.error( e.message );
         return;
@@ -390,7 +509,7 @@ function createSchoolMarker( school, colour )
             function() {
                 var html = "<h2>" + school.name + "</h2>";
                 html = html + "<p>" + school.address + "," + school.postcode + "</p>";
-                marker.openInfoWindowHtml( html );
+                marker.openInfoWindowHtml( html, { suppressMapPan:true } );
             } 
         );
         marker.school = school;
@@ -464,6 +583,14 @@ function ignoreConsoleErrors()
         };
     }
 }
+
+function toggleLayer( i )
+{
+    console.log( "togglePanoramio:" + i.checked );
+    if ( i.checked ) layers[i.name].show();
+    else layers[i.name].hide();
+}
+
 function initMap()
 {
     ignoreConsoleErrors();
@@ -477,10 +604,37 @@ function initMap()
         console.log( "google maps not supported" );
         return;
     }
-    map = new GMap2( document.getElementById( "map" ) );
+    var map_div = document.getElementById( "map" );
+    map = new GMap2( map_div );
     map.addControl( new GSmallMapControl() );
     map.addControl( new GMapTypeControl() );
     map.addMapType( G_SATELLITE_3D_MAP );
+    map.addMapType( G_PHYSICAL_MAP );
+    var mapTd = document.getElementById( "mapTd" );
+    var fieldset = document.createElement( "FIELDSET" );
+    var legend = document.createElement( "LEGEND" );
+    legend.appendChild( document.createTextNode( "Layers" ) );
+    fieldset.appendChild( legend );
+    for ( var type in layer_config )
+    {
+        console.log( "set up " + type );
+        layers[type] = new GLayer( layer_config[type] );
+        map.addOverlay( layers[type] );
+        var input = document.createElement( "INPUT" );
+        input.type = "checkbox";
+        input.name = input.id = type;
+        input.onchange = function() { toggleLayer( this ) };
+        if ( input.checked ) layers[type].show();
+        else layers[type].hide();
+        fieldset.appendChild( input );
+        var label = document.createElement( "LABEL" );
+        label.htmlFor = type;
+        label.appendChild( document.createTextNode( type ) );
+        fieldset.appendChild( label );
+    }
+    console.log( fieldset );
+    mapTd.appendChild( fieldset );
+
     map.setCenter( default_centre, default_zoom );
     if ( 
         params.minLon &&
@@ -499,12 +653,12 @@ function initMap()
         var centre = new GLatLng( params.centreLat, params.centreLon );
         map.setCenter( centre );
     }
-    GEvent.addListener( map, "zoomend", getSchools );
-    GEvent.addListener( map, "moveend", getSchools );
+    setMapListeners();
     if ( params.address ) document.forms[0].address.value = params.address;
     if ( params.limit ) document.forms[0].limit.value = params.limit;
     setOrderBy();
     getSchools();
+    gdir = new GDirections( map );
 }
 
 function createListTd( opts )
@@ -641,9 +795,6 @@ function createHeadCell( tr, name, title )
     setText( a, name );
 }
 
-var handle = {};
-var gdir = {};
-
 function createListTable()
 {
     var table = document.createElement( "TABLE" );
@@ -658,10 +809,8 @@ function createListTable()
         var school = schools[i];
         var tr = createListRow( i, school );
         tbody.appendChild( tr );
-        gdir[school.code] = new GDirections( map );
     }
     var ncells = tr.childNodes.length;
-    console.log( "ncells = " + ncells );
     if ( place )
     {
         var tr = document.createElement( "TR" );
@@ -671,14 +820,6 @@ function createListTable()
             var td = document.createElement( "TD" );
             tr.appendChild( td );
         }
-        var td = document.createElement( "TD" );
-        td.style.whiteSpace = "nowrap";
-        tr.appendChild( td );
-        var a = document.createElement( "A" );
-        setText( a, "[ calculate all ]" );
-        a.onclick = calculateAllDistances;
-        listDiv.appendChild( document.createElement( "BR" ) );
-        td.appendChild( a );
     }
     return table;
 }
@@ -690,8 +831,11 @@ function getIconUrl( letter, colour )
 
 function changeMarkerColour( marker, colour )
 {
-    var image = getIconUrl( marker.school.letter, colour );
-    marker.setImage( image );
+    var icon = marker.getIcon();
+    var image = icon.image;
+    var new_image = image.replace( icon.colour, colour );
+    icon.colour = colour;
+    marker.setImage( new_image );
 }
 
 function changeLinksColour( links, color )
