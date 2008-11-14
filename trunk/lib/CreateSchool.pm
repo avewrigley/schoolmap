@@ -5,7 +5,46 @@ use warnings;
 
 require Geo::Postcode;
 require Geo::Coder::Google;
+require Geo::Coder::Yahoo;
 use Data::Dumper;
+
+sub get_location
+{
+    my $self = shift;
+    my $address = shift;
+    my %opts = @_;
+
+    die "no using parameter\n" unless my $using = $opts{using};
+    warn "looking up $address using $using ...\n";
+    if ( $using eq 'google' )
+    {
+        my $response = $self->{geogoogle}->geocode( location => $address );
+        if ( $response->{Status}{code} == 620 )
+        {
+            die "Too many geocoding queries\n";
+        }
+        if ( $response->{Status}{code} != 200 )
+        {
+            die "geocoding query failed: $response->{Status}{code}\n";
+        }
+        my $location = $response->{Placemark}[0];
+        die "failed to get location for $address\n" unless $location;
+        my $coords = $location->{Point}{coordinates};
+        return @$coords;
+    }
+    elsif ( $using eq 'yahoo' )
+    {
+        my $response = $self->{geoyahoo}->geocode( location => $address );
+        my $location = $response->[0];
+        die "failed to get location for $address:\n", Dumper( $response ), "\n" unless $location;
+        warn "found $location->{longitude}, $location->{latitude}\n";
+        return ( $location->{longitude}, $location->{latitude} );
+    }
+    else
+    {
+        die "don't know how to lookup using $using\n";
+    }
+}
 
 sub create_school
 {
@@ -18,36 +57,26 @@ sub create_school
     die "no postcode" unless $school{postcode};
     my $postcode = $school{postcode};
     die "no $id_key" unless $school{$id_key};
-    warn "lookup $school{$id_key} ...\n";
+    $school{postcode} = uc( $school{postcode} );
+    $school{postcode} =~ s/[^0-9A-Z]//g;
+    # warn "lookup @school{qw(postcode name)} ...\n";
     $self->{ssth}->execute( @school{qw(postcode name)} );
     my $school = $self->{ssth}->fetchrow_hashref();
     if ( $school )
     {
-        warn "UPDATE $school->{name}\n";
+        # warn "UPDATE $school->{name}\n";
         my $school = $self->{usth}->execute( @school{$id_key, qw(postcode name)} );
         return;
     }
-    warn "can't find school for $school{name}\n";
-    warn "school: $school{$id_key}\n";
-    $school{postcode} = uc( $school{postcode} );
-    $school{postcode} =~ s/[^0-9A-Z]//g;
-    if ( $school{lat} && $school{lon} )
+    warn "new school: $school{name}\n";
+    unless ( $school{lat} && $school{lon} )
     {
-        $self->{geopostcode}->add( $school{postcode}, $school{lat}, $school{lon} );
+        ( $school{lon}, $school{lat} ) = $self->get_location( $school{address}, using => "yahoo" );
+        die "no lat / lon for postcode $school{postcode}" 
+            unless $school{lat} && $school{lon}
+        ;
     }
-    else
-    {
-        %school = ( %school, $self->{geopostcode}->find( $school{postcode} ) );
-        if ( ! $school{lat} && $school{lon} )
-        {
-            warn "looking up $postcode on google ...\n";
-            my $location = $self->{geogoogle}->geocode( location => $postcode );
-            warn Dumper $location;
-            exit;
-        }
-    }
-    die "no lat / lon for postcode $school{postcode}" 
-        unless $school{lat} && $school{lon};
+    $self->{geopostcode}->add( $school{postcode}, $school{lat}, $school{lon} );
     $self->{isth} = $self->{dbh}->prepare( <<SQL );
 REPLACE INTO school ( $id_key, name, postcode, address ) VALUES ( ?,?,?,? )
 SQL
@@ -55,7 +84,8 @@ SQL
     $self->{isth}->finish();
 }
 
-my $api_key = "ABQIAAAAzvdwQCWLlw5TXpo7sNhCSRTpDCCGWHns9m2oc9sQQ_LCUHXVlhS7v4YbLZCNgHXnaepLqcd-J0BBDw";
+my $google_api_key = "ABQIAAAAzvdwQCWLlw5TXpo7sNhCSRTpDCCGWHns9m2oc9sQQ_LCUHXVlhS7v4YbLZCNgHXnaepLqcd-J0BBDw";
+my $yahoo_api_key = "8iy5OSrV34EfmQoZVXSrpkinxPQT7jYcNPs8AbkK8ngkpqNt8.HJg4N.8dzzrcp6wdg-";
 sub new
 {
     my $class = shift;
@@ -63,8 +93,9 @@ sub new
     my $self = bless \%args, $class;
     die "no dbh\n" unless $self->{dbh};
     $self->{geopostcode} = Geo::Postcode->new( backoff => $args{backoff_postcodes} );
+    $self->{geoyahoo} = Geo::Coder::Yahoo->new( appid => $yahoo_api_key );
     $self->{geogoogle} = Geo::Coder::Google->new(
-        apikey => $api_key,
+        apikey => $google_api_key,
         host => "maps.google.co.uk",
     );
     $self->{ssth} = $self->{dbh}->prepare( "SELECT * FROM school WHERE postcode = ? AND name = ?" );

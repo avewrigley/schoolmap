@@ -16,6 +16,18 @@
 /*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
 
 --
+-- Table structure for table `acronym`
+--
+
+DROP TABLE IF EXISTS `acronym`;
+CREATE TABLE `acronym` (
+  `acronym` varchar(255) NOT NULL,
+  `dcsf_id` int(10) unsigned NOT NULL,
+  `type` varchar(255) NOT NULL,
+  PRIMARY KEY  (`acronym`,`dcsf_id`, `type` )
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
 -- Table structure for table `address`
 --
 
@@ -28,13 +40,14 @@ CREATE TABLE `address` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
--- Table structure for table `dfes`
+-- Table structure for table `dcsf`
 --
 
-DROP TABLE IF EXISTS `dfes`;
-CREATE TABLE `dfes` (
+DROP TABLE IF EXISTS `dcsf`;
+CREATE TABLE `dcsf` (
+  `type` varchar(255) NOT NULL,
   `pupils_primary` int(11) default NULL,
-  `dfes_id` int(10) unsigned NOT NULL,
+  `dcsf_id` int(10) unsigned NOT NULL,
   `average_secondary` float default NULL,
   `pupils_secondary` float default NULL,
   `pupils_post16` int(11) default NULL,
@@ -46,7 +59,7 @@ CREATE TABLE `dfes` (
   `average_ks3` float default '0',
   `pupils_ks3` int(11) default '0',
   `average_primary` float default NULL,
-  PRIMARY KEY  (`dfes_id`),
+  PRIMARY KEY  (`dcsf_id`),
   KEY `urls` (`secondary_url`,`primary_url`),
   KEY `urls2` (`ks3_url`,`post16_url`),
   KEY `py` (`primary_url`),
@@ -78,14 +91,11 @@ DROP TABLE IF EXISTS `postcode`;
 CREATE TABLE `postcode` (
   `lat` float NOT NULL default '0',
   `lon` float NOT NULL default '0',
-  `x` int(11) NOT NULL default '0',
-  `y` int(11) NOT NULL default '0',
   `code` varchar(8) NOT NULL default '',
-  `location` point NOT NULL default '',
   PRIMARY KEY  (`code`),
-  SPATIAL KEY `location` (`location`(32)),
   KEY `lon` (`lon`),
-  KEY `lat` (`lat`)
+  KEY `lat` (`lat`),
+  KEY `lon_lat` (`lon`,`lat`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -99,11 +109,13 @@ CREATE TABLE `school` (
   `address` varchar(255) default '',
   `dfes_id` int(10) unsigned default NULL,
   `ofsted_id` int(10) unsigned default NULL,
+  `dcsf_id` int(10) unsigned default NULL,
   PRIMARY KEY  (`postcode`,`name`),
   KEY `dfes_id` (`dfes_id`),
   KEY `ofsted_id` (`ofsted_id`),
   KEY `postcode` (`postcode`),
-  KEY `name` (`name`)
+  KEY `name` (`name`),
+  KEY `dcsf_id` (`dcsf_id`)
 ) ENGINE=MyISAM AUTO_INCREMENT=108604 DEFAULT CHARSET=latin1;
 
 --
@@ -127,4 +139,4 @@ CREATE TABLE `url` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2008-06-05 13:51:24
+-- Dump completed on 2008-11-14 17:08:09
