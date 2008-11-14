@@ -63,10 +63,10 @@ sub get_schools
     my @what = ( "*" );
     my $what = join( ",", @what );
     my @where = ( "school.postcode = postcode.code" );
-    if ( $self->{order_by} )
-    {
-        push( @where, "average_$self->{order_by} IS NOT NULL" );
-    }
+    # if ( $self->{order_by} )
+    # {
+    # push( @where, "average_$self->{order_by} IS NOT NULL" );
+    # }
     if ( $self->{minLon} && $self->{maxLon} && $self->{minLat} && $self->{maxLat} )
     {
         push( 
@@ -84,12 +84,12 @@ sub get_schools
         push( @where, "school.ofsted_id IS NOT NULL" );
     }
     my $where = @where ? "WHERE " . join( " AND ", @where ) : '';
-    my @from = ( "dfes", "postcode", "school" );
+    my @from = ( "dcsf", "postcode", "school" );
     $self->{from} = "FROM " . join( ",", @from );
     my $sql = <<EOF;
 SELECT SQL_CALC_FOUND_ROWS $what FROM postcode, school 
     LEFT JOIN ofsted ON ( school.ofsted_id = ofsted.ofsted_id )
-    LEFT JOIN dfes ON ( school.dfes_id = dfes.dfes_id )
+    LEFT JOIN dcsf ON ( school.dcsf_id = dcsf.dcsf_id )
     $where
 EOF
     if ( $self->{order_by} )

@@ -15,7 +15,7 @@ sub new
     my %args = @_;
     my $self = bless \%args, $class;
     $self->{dbh} = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
-    $self->{dfes_types} = {
+    $self->{dcsf_types} = {
         post16 => "GCE and VCE",
         ks3 => "Key Stage 3",
         secondary => "GCSE",
@@ -36,7 +36,7 @@ sub get_types
     my $self = shift;
     my $school = shift;
     my @types;
-    for my $url_type ( "ofsted", keys %{$self->{dfes_types}} )
+    for my $url_type ( "ofsted", keys %{$self->{dcsf_types}} )
     {
         my $key = "${url_type}_url";
         push( @types, $url_type ) if $school->{$key};
@@ -67,7 +67,7 @@ sub get_tabs
             warn "ADD A $url_type TAB\n";
             push( @$tabs, {
                     url => $url,
-                    description => $self->{dfes_types}{$url_type} || "Ofsted",
+                    description => $self->{dcsf_types}{$url_type} || "Ofsted",
                     current => $url_type eq $type
                 }
             );
@@ -80,7 +80,7 @@ sub html
 {
     my $self = shift;
 
-    my $school_sql = "SELECT * FROM school LEFT JOIN dfes USING ( dfes_id ) LEFT JOIN ofsted USING( ofsted_id ) WHERE school.$self->{table}_id = ?";
+    my $school_sql = "SELECT * FROM school LEFT JOIN dcsf USING ( dcsf_id ) LEFT JOIN ofsted USING( ofsted_id ) WHERE school.$self->{table}_id = ?";
     warn "$school_sql\n";
     my $school_sth = $self->{dbh}->prepare( $school_sql );
     $school_sth->execute( $self->{id} );

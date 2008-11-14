@@ -10,7 +10,7 @@ var place;
 var schools_url = "schools";
 var school_url = "school";
 
-var schools;
+var schools = new Array();
 var nschools = 0;
 var params = new Object();
 var keystages = new Array();
@@ -35,6 +35,7 @@ var layer_config = {
 };
 
 var layers = new Object();
+var addressMarker = false;
 
 function setMapListeners()
 {
@@ -62,6 +63,9 @@ function clearAddress()
 {
     document.forms[0].address.value = "";
     place = false;
+    console.log( "remove " + addressMarker );
+    if ( addressMarker ) map.removeOverlay( addressMarker );
+    addressMarker = false;
     getSchools();
 }
 
@@ -73,9 +77,8 @@ function place2point( a )
 function createAddressMarker()
 {
     if ( ! place ) return;
-    var marker = new GMarker( place.point );
-    map.addOverlay( marker );
-    return marker;
+    addressMarker = new GMarker( place.point );
+    map.addOverlay( addressMarker );
 }
 
 function getAddress()
@@ -220,7 +223,7 @@ function updateSchools()
     try {
         var body = document.getElementsByTagName( "body" );
         body[0].style.cursor = "auto";
-        map.clearOverlays();
+        // map.clearOverlays();
         removeChildren( listDiv );
         googleDiv.innerHTML = google_html;
         for ( var i = 0; i < schools.length; i++ )
@@ -342,6 +345,12 @@ function getSchools()
         "&minLat=" + escape( sw.lat() ) + 
         "&maxLat=" + escape( ne.lat() )
     ;
+    for ( var i = 0; i < schools.length; i++ )
+    {
+        var school = schools[i];
+        if ( school.marker ) map.removeOverlay( school.marker );
+        school.marker = null;
+    }
     schools = new Array();
     var url = schools_url + "?" + query_string;
     createLinkTo( query_string );
@@ -512,7 +521,7 @@ function createSchoolMarker( school, colour )
                 marker.openInfoWindowHtml( html, { suppressMapPan:true } );
             } 
         );
-        marker.school = school;
+        // marker.school = school;
         school.marker = marker;
         school.point = point;
     }
@@ -531,6 +540,11 @@ function setOrderBy()
     try {
         var curr = document.forms[0].order_by.value || params.order_by;
         removeChildren( document.forms[0].order_by );
+        var opt = addOpt( 
+            document.forms[0].order_by, 
+            "-",
+            ""
+        );
         for ( var i = 0; i < keystages.length; i++ )
         {
             var keystage = keystages[i];
