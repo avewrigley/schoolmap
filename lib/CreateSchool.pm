@@ -49,23 +49,28 @@ sub get_location
 sub create_school
 {
     my $self = shift;
-    my $id_key = shift;
-    die "no id_key" unless $id_key;
+    my $type = shift;
+    die "no type" unless $type;
     my %school = @_;
 
     die "no name" unless $school{name};
     die "no postcode" unless $school{postcode};
     my $postcode = $school{postcode};
+    my $id_key = $type . "_id";
     die "no $id_key" unless $school{$id_key};
+    my $type_key = $type . "_type";
+    die "no $type_key" unless $school{$type_key};
     $school{postcode} = uc( $school{postcode} );
     $school{postcode} =~ s/[^0-9A-Z]//g;
     # warn "lookup @school{qw(postcode name)} ...\n";
-    $self->{ssth}->execute( @school{qw(postcode name)} );
-    my $school = $self->{ssth}->fetchrow_hashref();
+    my $ssth = $self->{dbh}->prepare( "SELECT * FROM school WHERE postcode = ? AND name = ?" );
+    $ssth->execute( @school{qw(postcode name)} );
+    my $school = $ssth->fetchrow_hashref();
     if ( $school )
     {
         # warn "UPDATE $school->{name}\n";
-        my $school = $self->{usth}->execute( @school{$id_key, qw(postcode name)} );
+        my $usth = $self->{dbh}->prepare( "UPDATE school SET ${type}_id = ?, ${type}_type = ? WHERE postcode = ? AND name = ?" );
+        my $school = $usth->execute( @school{$id_key, $type_key, qw(postcode name)} );
         return;
     }
     warn "new school: $school{name}\n";
@@ -77,11 +82,10 @@ sub create_school
         ;
     }
     $self->{geopostcode}->add( $school{postcode}, $school{lat}, $school{lon} );
-    $self->{isth} = $self->{dbh}->prepare( <<SQL );
-REPLACE INTO school ( $id_key, name, postcode, address ) VALUES ( ?,?,?,? )
+    my $isth = $self->{dbh}->prepare( <<SQL );
+REPLACE INTO school ( $id_key, $type_key, name, postcode, address ) VALUES ( ?,?,?,?,? )
 SQL
-    $self->{isth}->execute( @school{$id_key, qw( name postcode address )} );
-    $self->{isth}->finish();
+    $isth->execute( @school{$id_key, $type_key, qw( name postcode address )} );
 }
 
 my $google_api_key = "ABQIAAAAzvdwQCWLlw5TXpo7sNhCSRTpDCCGWHns9m2oc9sQQ_LCUHXVlhS7v4YbLZCNgHXnaepLqcd-J0BBDw";
@@ -98,16 +102,7 @@ sub new
         apikey => $google_api_key,
         host => "maps.google.co.uk",
     );
-    $self->{ssth} = $self->{dbh}->prepare( "SELECT * FROM school WHERE postcode = ? AND name = ?" );
-    $self->{usth} = $self->{dbh}->prepare( "UPDATE school SET ofsted_id = ? WHERE postcode = ? AND name = ?" );
     return $self;
-}
-
-sub DESTROY
-{
-    my $self = shift;
-    $self->{ssth}->finish if $self->{ssth};
-    $self->{usth}->finish if $self->{ssth};
 }
 
 1;

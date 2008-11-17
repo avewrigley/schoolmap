@@ -28,10 +28,29 @@
 </td>
 <td align="right">
     <div class="controls" >
-    <b>ofsted report available:</b>
-    <select name="ofsted" onchange="getSchools()">
-        <option value="yes">yes</option>
-        <option selected="selected" value="no">no</option>
+    <b>school type:</b>
+    <select name="ofsted_type" onchange="
+            if ( this.value == 'primary' )
+            {
+                this.form.order_by.value = this.value;
+                this.form.special.value = 'all';
+                this.form.special.disabled = true;
+            }
+            else
+            {
+                this.form.special.disabled = false;
+            }
+            getSchools();
+        ">
+        <option value="" selected="selected">all</option>
+        <option value="primary">primary</option>
+        <option value="secondary">secondary</option>
+        <option value="independent">independent</option>
+        <option value="special">special</option>
+    </select>
+    <b>specialism:</b>
+    <select name="special" onchange="getSchools()">
+        <option value="" selected="selected">all</option>
     </select>
     <b>no. schools:</b>
     <select name="limit" onchange="getSchools()">

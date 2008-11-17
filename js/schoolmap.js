@@ -8,9 +8,11 @@ var address_zoom = 12;
 var max_zoom = 15;
 var place;
 var schools_url = "schools";
+var acronyms_url = "acronyms.json";
 var school_url = "school";
 
 var schools = new Array();
+var active_school;
 var nschools = 0;
 var params = new Object();
 var keystages = new Array();
@@ -20,6 +22,12 @@ var request = false;
 var symbols = new Object();
 var curtags = [ "body", "a", "input", "select", "div" ];
 var listDiv;
+var types = {
+    primary:{ colour: "0000ff", active_colour:"aaaaff" },
+    secondary:{ colour: "ff0000", active_colour:"ffaaaa" },
+    independent:{ colour: "00ff00", active_colour:"aaffaa" },
+    special:{ colour: "00ffff", active_colour:"aaffff" }
+};
 var blue = "4444ff";
 var red = "ff4444";
 var gdir;
@@ -223,12 +231,18 @@ function updateSchools()
     try {
         var body = document.getElementsByTagName( "body" );
         body[0].style.cursor = "auto";
-        // map.clearOverlays();
         removeChildren( listDiv );
         googleDiv.innerHTML = google_html;
         for ( var i = 0; i < schools.length; i++ )
         {
-            createSchoolMarker( schools[i], blue );
+            var school = schools[i];
+            var type = types[school.ofsted_type];
+            if ( ! type )
+            {
+                console.error( "no type for " + school.name );
+            }
+            var colour = type ? type.colour : blue;
+            createSchoolMarker( school, colour );
         }
         if ( schools.length )
         {
@@ -295,6 +309,20 @@ function getJSON( url, callback )
     request.send( null );
 }
 
+function get( url, callback )
+{
+    var request = new XMLHttpRequest();
+    request.open( 'GET', url, true );
+    request.onreadystatechange = function() {
+        if ( request.readyState != 4 ) return;
+        if ( request.status == 0 ) return; // aborted request
+        setCursor( "default" );
+        if ( request.status == 200 ) callback( request );
+        else console.error( "GET " + url + " failed: " + request.status );
+    };
+    request.send( null );
+}
+
 function createXMLHttpRequest()
 {
     if ( typeof XMLHttpRequest != "undefined" )
@@ -325,8 +353,8 @@ function getSchools()
 {
     setOrderBy();
     var order_by = document.forms[0].order_by.value;
-    var ofsted = document.forms[0].ofsted.value;
-    console.log( "ofsted: " + ofsted );
+    var ofsted_type = document.forms[0].ofsted_type.value;
+    var special = document.forms[0].special.value;
     var status = "finding the top " + document.forms[0].limit.value + " ";
     status = status + "schools ";
     status = status + "(ordered by " + order_by + ")";
@@ -338,7 +366,8 @@ function getSchools()
     var ne = bounds.getNorthEast();
     var query_string = 
         "&order_by=" + escape( order_by ) +
-        "&ofsted=" + escape( ofsted ) +
+        "&ofsted_type=" + escape( ofsted_type ) +
+        "&special=" + escape( special ) +
         "&limit=" + escape( document.forms[0].limit.value ) +
         "&minLon=" + escape( sw.lng() ) + 
         "&maxLon=" + escape( ne.lng() ) + 
@@ -352,9 +381,9 @@ function getSchools()
         school.marker = null;
     }
     schools = new Array();
+    active_school = false;
     var url = schools_url + "?" + query_string;
     createLinkTo( query_string );
-    // getXML( url, getSchoolsCallback );
     getJSON( url, getJSONCallback );
 }
 
@@ -393,32 +422,30 @@ function createMarker( letter, colour, point )
     return marker;
 }
 
-var active_school;
-
 function deActivateSchool( school )
 {
-    changeLinksColour( school.links, blue )
-    changeMarkerColour( school.marker, blue )
-    active_school = school;
-    school.marker.active = false;
+    changeLinksColour( school, blue );
+    var type = types[school.ofsted_type];
+    if ( ! type )
+    {
+        console.error( "no type for " + school.name );
+        return;
+    }
+    changeMarkerColour( school, type.colour );
 }
 
 function activateSchool( school )
 {
-    changeLinksColour( school.links, red )
-    changeMarkerColour( school.marker, red )
+    changeLinksColour( school, red );
+    var type = types[school.ofsted_type];
+    if ( ! type )
+    {
+        console.error( "no type for " + school.name );
+        return;
+    }
+    changeMarkerColour( school, type.active_colour )
     if ( active_school ) deActivateSchool( active_school );
-    school.marker.active = true;
-}
-
-function markerMouseoutCallback( school ) 
-{
-    deActivateSchool( school );
-}
-
-function markerMouseoverCallback( school ) 
-{
-    activateSchool( school );
+    active_school = school;
 }
 
 function calculateAllDistances()
@@ -507,11 +534,11 @@ function calculateDistance( school )
 function createSchoolMarker( school, colour ) 
 {
     try {
-        school.letter = getLetter( school.name );
+        school.letter = getLetter( school );
         var point = new GLatLng( school.lat, school.lon );
         var marker = createMarker( school.letter, colour, point );
-        GEvent.addListener( marker, "mouseout", function() { markerMouseoutCallback( school ) } );
-        GEvent.addListener( marker, "mouseover", function() { markerMouseoverCallback( school ) } );
+        GEvent.addListener( marker, "mouseout", function() { deActivateSchool( school ) } );
+        GEvent.addListener( marker, "mouseover", function() { activateSchool( school ) } );
         GEvent.addListener( 
             marker, 
             "click", 
@@ -564,7 +591,10 @@ function initTableHead( tr )
     var ths = new Array();
     createHeadCell( tr, "no" );
     createHeadCell( tr, "name", "Name of school" );
-    createHeadCell( tr, "ofsted report", "link to Ofsted report" );
+    createHeadCell( tr, "type", "Type of school" );
+    createHeadCell( tr, "age range", "Range of ages in the school" );
+    createHeadCell( tr, "special", "Specialist Schools (as designated under the specialist school programme)" );
+    createHeadCell( tr, "ofsted report", "Link to Ofsted report" );
     for ( var i = 0; i < keystages.length; i++ ) 
         createHeadCell( tr, keystages[i].description, "average score" );
     ;
@@ -673,6 +703,16 @@ function initMap()
     setOrderBy();
     getSchools();
     gdir = new GDirections( map );
+    get( acronyms_url, acronymsCallback );
+}
+
+function acronymsCallback( response ) {
+    var specialisms = JSON.parse( response.responseText );
+    var sel = document.forms[0].special;
+    for ( var s in specialisms )
+    {
+        addOpt( sel, specialisms[s], s );
+    }
 }
 
 function createListTd( opts )
@@ -687,7 +727,9 @@ function createListTd( opts )
         var school = opts.school;
         if ( ! school.links ) school.links = new Array();
         school.links.push( a );
-        a.appendChild( document.createTextNode( opts.text ) );
+        var text = "-";
+        if ( opts.text && opts.text != "null" ) text = opts.text;
+        a.appendChild( document.createTextNode( text ) );
         td.appendChild( a );
         a.onmouseover = function() {
             activateSchool( school );
@@ -744,6 +786,9 @@ function createListRow( no, school )
     var url = school_url + "?table=dfes&id=" + school.dfes_id;
     tr.appendChild( createListTd( { "text":no+1, "url":url, "school":school } ) );
     tr.appendChild( createListTd( { "text":school.name, "url":url, "school":school } ) );
+    tr.appendChild( createListTd( { "text":school.ofsted_type, "url":url, "school":school } ) );
+    tr.appendChild( createListTd( { "text":school.age_range, "url":url, "school":school } ) );
+    tr.appendChild( createListTd( { "text":school.special, "url":url, "school":school } ) );
     if ( school.ofsted_url ) 
     {
         var url = school_url + "?table=ofsted&id=" + school.ofsted_id;
@@ -843,8 +888,10 @@ function getIconUrl( letter, colour )
     return icon_root_url + 'marker-' + colour.toUpperCase() + "-" + letter + '.png';
 }
 
-function changeMarkerColour( marker, colour )
+function changeMarkerColour( school, colour )
 {
+    var marker = school.marker;
+    if ( ! marker ) return;
     var icon = marker.getIcon();
     var image = icon.image;
     var new_image = image.replace( icon.colour, colour );
@@ -852,13 +899,18 @@ function changeMarkerColour( marker, colour )
     marker.setImage( new_image );
 }
 
-function changeLinksColour( links, color )
+function changeLinksColour( school, color )
 {
-    if ( ! links ) return;
+    var links = school.links;
+    if ( ! links ) 
+    {
+        console.error( "no links for " + school.name );
+        return;
+    }
     for ( var i = 0; i < links.length; i++ )
     {
         link = links[i];
-        link.style.color = color;
+        link.style.color = "#" + color;
     }
 }
 
@@ -870,10 +922,11 @@ function addOpt( sel, str, val, isSel )
     return opt;
 }
 
-function getLetter( name )
+function getLetter( school )
 {
-    name = name.replace( /The /i, "" );
-    var letter = name.substr( 0, 1 ).toUpperCase();
+    // var name = school.name;
+    // name = name.replace( /The /i, "" );
+    var letter = school.ofsted_type.substr( 0, 1 ).toUpperCase();
     return letter;
 }
 

@@ -26,6 +26,8 @@ my %types = (
     primary => qr/primary schools/i,
     secondary => qr/secondary schools/i,
     independent => qr/independent education/i,
+    special => qr/special schools/i,
+    college => qr/colleges/i,
 );
 
 my ( $dbh, $sc );
@@ -33,6 +35,7 @@ my ( $dbh, $sc );
 # Main
 
 $opts{pidfile} = 1;
+$opts{force} = 1;
 GetOptions( \%opts, @opts ) or pod2usage( verbose => 0 );
 my $pp;
 if ( $opts{pidfile} )
@@ -50,13 +53,14 @@ if ( $opts{flush} )
     }
 }
 $sc = CreateSchool->new( dbh => $dbh );
-my $ssth = $dbh->prepare( "SELECT * FROM ofsted WHERE ofsted_id = ? AND ofsted_url = ?" );
-my $rsth = $dbh->prepare( "REPLACE INTO ofsted ( ofsted_id, ofsted_url ) VALUES ( ?, ? )" );
+my $ssth = $dbh->prepare( "SELECT * FROM ofsted WHERE ofsted_id = ? AND ofsted_url = ? AND type = ?" );
+my $rsth = $dbh->prepare( "REPLACE INTO ofsted ( ofsted_id, ofsted_url, type ) VALUES ( ?, ?, ? )" );
 unless ( $opts{verbose} )
 {
     open( STDERR, ">$logfile" ) or die "can't write to $logfile\n";
 }
-for my $type ( keys %types )
+my @types = $opts{type} ? ( $opts{type} ) : keys %types;
+for my $type ( @types )
 {
     warn "searching $type schools\n";
     my $mech = WWW::Mechanize->new();
@@ -84,12 +88,12 @@ for my $type ( keys %types )
         {
             $i++;
             my $url = $link->url_abs;
-            my %school;
+            my %school = ( type => $type, ofsted_type => $type );
             ( $school{ofsted_id} ) = $url =~ $url_regex;
             $school{url} = $url;
             $school{name} = $link->text;
             warn "($i / $nreports) $type - $school{name}\n";
-            $ssth->execute( @school{qw(ofsted_id url)} );
+            $ssth->execute( @school{qw(ofsted_id url type)} );
             my $school = $ssth->fetchrow_hashref();
             if ( ! $opts{force} && $school )
             {
@@ -108,8 +112,8 @@ for my $type ( keys %types )
                 die "no postcode ($school{address})\n" unless $school{postcode};
                 $school{postcode} =~ s/^\s*//g;
                 $school{postcode} =~ s/\s*$//g;
-                $sc->create_school( 'ofsted_id', %school );
-                $rsth->execute( @school{qw(ofsted_id url)} );
+                $sc->create_school( 'ofsted', %school );
+                $rsth->execute( @school{qw(ofsted_id url type)} );
             };
             if ( $@ )
             {
