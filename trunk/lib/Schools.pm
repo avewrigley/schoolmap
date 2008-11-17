@@ -62,26 +62,33 @@ sub get_schools
     my @args;
     my @what = ( "*" );
     my $what = join( ",", @what );
-    my @where = ( "school.postcode = postcode.code" );
-    # if ( $self->{order_by} )
-    # {
-    # push( @where, "average_$self->{order_by} IS NOT NULL" );
-    # }
+    my @where = ( 
+        "school.postcode = postcode.code", 
+        "school.ofsted_id IS NOT NULL" ,
+        "school.ofsted_type IS NOT NULL" 
+    );
     if ( $self->{minLon} && $self->{maxLon} && $self->{minLat} && $self->{maxLat} )
     {
         push( 
             @where,
             (
-                "postcode.lon > $self->{minLon}",
-                "postcode.lon < $self->{maxLon}",
-                "postcode.lat > $self->{minLat}",
-                "postcode.lat < $self->{maxLat}",
+                "postcode.lon > ?",
+                "postcode.lon < ?",
+                "postcode.lat > ?",
+                "postcode.lat < ?",
             )
         );
+        push( @args, $self->{minLon}, $self->{maxLon}, $self->{minLat}, $self->{maxLat} );
     }
-    if ( $self->{ofsted} eq 'yes' )
+    if ( $self->{special} )
     {
-        push( @where, "school.ofsted_id IS NOT NULL" );
+        push( @where, "dcsf.special = ?" );
+        push( @args, $self->{special} );
+    }
+    if ( $self->{ofsted_type} )
+    {
+        push( @where, "school.ofsted_type = ?" );
+        push( @args, $self->{ofsted_type} );
     }
     my $where = @where ? "WHERE " . join( " AND ", @where ) : '';
     my @from = ( "dcsf", "postcode", "school" );

@@ -20,6 +20,7 @@ require HTML::TableExtract;
 use DBI;
 use lib "$Bin/lib";
 require CreateSchool;
+use Acronyms;
 
 my $postcode_regex = qr{^([A-PR-UWYZ0-9][A-HK-Y0-9][AEHMNPRTVXY0-9]?[ABEHMNPRVWXY0-9]? {1,2}[0-9][ABD-HJLN-UW-Z]{2}|GIR 0AA)$}i;
 
@@ -60,7 +61,7 @@ sub update_school
     my $school_name = shift;
     my $url = shift;
     my $row = shift;
-    my %school = ( name => $school_name );
+    my %school = ( name => $school_name, dcsf_type => $type );
     ( $school{dcsf_id} ) = $url =~ m{No=(\d+)};
     my $mech = WWW::Mechanize->new();
     $mech->get( $url );
@@ -82,7 +83,7 @@ sub update_school
     {
         die "no postcode for $school{name} $school{address} ($url)\n";
     }
-    $sc->create_school( 'dcsf_id', %school );
+    $sc->create_school( 'dcsf', %school );
     my ( $score, $pupils );
     if ( my $i = $types{$type}{score_index} )
     {
@@ -110,6 +111,10 @@ sub update_school
     {
         $isth->execute( $school{dcsf_id}, $acronym, $type );
     }
+    my ( $age_range ) = grep /\d+-\d+/, @acronyms;
+    warn "age range: $age_range\n" if $age_range;
+    my ( $special ) = grep { exists $Acronyms::special{$_} } @acronyms;
+    warn "special: $special\n" if $special;
     my $select_sql = "SELECT * FROM dcsf WHERE dcsf_id = ?";
     my $select_sth = $dbh->prepare( $select_sql );
     $select_sth->execute( $school{dcsf_id} );
@@ -117,18 +122,18 @@ sub update_school
     if ( @row )
     {
         my $update_sql = <<EOF;
-UPDATE dcsf SET ${type}_url=?, average_${type}=?, pupils_${type}=?, type=? WHERE dcsf_id = ?
+UPDATE dcsf SET special=?, age_range=?, ${type}_url=?, average_${type}=?, pupils_${type}=?, type=? WHERE dcsf_id = ?
 EOF
         my $update_sth = $dbh->prepare( $update_sql );
-        $update_sth->execute( $url, $score, $pupils, $type, $school{dcsf_id} );
+        $update_sth->execute( $special, $age_range, $url, $score, $pupils, $type, $school{dcsf_id} );
     }
     else
     {
         my $insert_sql = <<EOF;
-INSERT INTO dcsf (${type}_url,average_${type},pupils_${type},type,dcsf_id) VALUES(?,?,?,?,?)
+INSERT INTO dcsf (special,age_range,${type}_url,average_${type},pupils_${type},type,dcsf_id) VALUES(?,?,?,?,?,?,?)
 EOF
         my $insert_sth = $dbh->prepare( $insert_sql );
-        $insert_sth->execute( $url, $score, $pupils, $type, $school{dcsf_id} );
+        $insert_sth->execute( $special,$age_range, $url, $score, $pupils, $type, $school{dcsf_id} );
     }
 }
 
@@ -146,7 +151,7 @@ $dbh = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseErr
 $sc = CreateSchool->new( dbh => $dbh );
 unless ( $opts{verbose} )
 {
-    open( STDERR, ">>$logfile" ) or die "can't write to $logfile\n";
+    open( STDERR, ">$logfile" ) or die "can't write to $logfile\n";
 }
 my $mech = WWW::Mechanize->new();
 my $te = HTML::TableExtract->new();
@@ -179,25 +184,37 @@ for my $type ( @types )
             my $text = $la->text;
             warn "\t\t$text\n";
             $mech->get( $url );
-            my $html = $mech->content();
-            $te->parse( $html );
-            foreach my $ts ( $te->tables ) {
-                foreach my $row ( $ts->rows ) {
-                    my $school_name = $row->[0];
-                    next unless $school_name && $school_name =~ /\S/;
-                    $school_name =~ s/^\s*//;
-                    $school_name =~ s/\s*$//;
-                    my ( $school_link ) = $mech->find_all_links( text => $school_name );
-                    next unless $school_link;
-                    my $url = $school_link->url_abs;
-                    warn "\t\t\t$school_name\n";
-                    eval {
-                        update_school( $type, $school_name, $url, $row );
-                    };
-                    if ( $@ )
-                    {
-                        warn "$school_name FAILED: $@\n";
+            while ( 1 )
+            {
+                my $html = $mech->content();
+                $te->parse( $html );
+                foreach my $ts ( $te->tables ) {
+                    foreach my $row ( $ts->rows ) {
+                        my $school_name = $row->[0];
+                        next unless $school_name && $school_name =~ /\S/;
+                        $school_name =~ s/^\s*//;
+                        $school_name =~ s/\s*$//;
+                        my ( $school_link ) = $mech->find_all_links( text => $school_name );
+                        next unless $school_link;
+                        my $url = $school_link->url_abs;
+                        warn "\t\t\t$school_name\n";
+                        eval {
+                            update_school( $type, $school_name, $url, $row );
+                        };
+                        if ( $@ )
+                        {
+                            warn "$school_name FAILED: $@\n";
+                        }
                     }
+                }
+                if ( $mech->follow_link( text_regex => qr/Next \d+ schools/ ) )
+                {
+                    warn "Next page ...\n";
+                }
+                else
+                {
+                    warn "no next links\n";
+                    last;
                 }
             }
         }
