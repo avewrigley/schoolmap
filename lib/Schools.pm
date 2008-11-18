@@ -64,8 +64,9 @@ sub get_schools
     my $what = join( ",", @what );
     my @where = ( 
         "school.postcode = postcode.code", 
-        "school.ofsted_id IS NOT NULL" ,
-        "school.ofsted_type IS NOT NULL" 
+        "school.ofsted_id = ofsted.ofsted_id",
+        "school.ofsted_type IS NOT NULL",
+        "school.dcsf_id = dcsf.dcsf_id",
     );
     if ( $self->{minLon} && $self->{maxLon} && $self->{minLat} && $self->{maxLat} )
     {
@@ -85,18 +86,26 @@ sub get_schools
         push( @where, "dcsf.special = ?" );
         push( @args, $self->{special} );
     }
+    if ( exists $self->{age} )
+    {
+        push( @where, "dcsf.min_age <= ? AND dcsf.max_age >= ?" );
+        push( @args, $self->{age}, $self->{age} );
+    }
     if ( $self->{ofsted_type} )
     {
         push( @where, "school.ofsted_type = ?" );
         push( @args, $self->{ofsted_type} );
     }
+    if ( $self->{find_school} )
+    {
+        push( @where, 'school.name LIKE ?' );
+        push( @args, "%" . $self->{find_school} ."%" );
+    }
     my $where = @where ? "WHERE " . join( " AND ", @where ) : '';
     my @from = ( "dcsf", "postcode", "school" );
     $self->{from} = "FROM " . join( ",", @from );
     my $sql = <<EOF;
-SELECT SQL_CALC_FOUND_ROWS $what FROM postcode, school 
-    LEFT JOIN ofsted ON ( school.ofsted_id = ofsted.ofsted_id )
-    LEFT JOIN dcsf ON ( school.dcsf_id = dcsf.dcsf_id )
+SELECT SQL_CALC_FOUND_ROWS $what FROM postcode, school, ofsted, dcsf
     $where
 EOF
     if ( $self->{order_by} )

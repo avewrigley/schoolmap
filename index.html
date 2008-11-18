@@ -14,20 +14,10 @@
     <script type="text/javascript" src="http://www.json.org/json2.js"></script>
     <link rel="stylesheet" href="/css/schoolmap.css" type="text/css" media="screen" />
 </head>
-<body onload="initMap()">
-<div id="google">
-</div>
+<body onload="SCHOOLMAP.initMap()">
 <hr />
-<form action="/" onsubmit="getSchools(); return false">
-<table cellpadding="0" cellspacing="0" style="width:100%"><tr>
-<td>
-        <span><b>address:</b></span>
-        <input size="10" name="address" />
-        <input type="submit" name="gotobutton" value="goto" onclick="getAddress(); return false" />
-        <input type="submit" name="gotoclear" value="clear" onclick="clearAddress(); return false" />
-</td>
-<td align="right">
-    <div class="controls" >
+<form action="/" onsubmit="SCHOOLMAP.getSchools(); return false">
+<div class="controls" >
     <b>school type:</b>
     <select name="ofsted_type" onchange="
             if ( this.value == 'primary' )
@@ -40,7 +30,7 @@
             {
                 this.form.special.disabled = false;
             }
-            getSchools();
+            SCHOOLMAP.getSchools();
         ">
         <option value="" selected="selected">all</option>
         <option value="primary">primary</option>
@@ -48,12 +38,16 @@
         <option value="independent">independent</option>
         <option value="special">special</option>
     </select>
+    <b>age:</b>
+    <select name="age" onchange="SCHOOLMAP.getSchools()">
+        <option value="" selected="selected">-</option>
+    </select>
     <b>specialism:</b>
-    <select name="special" onchange="getSchools()">
+    <select name="special" onchange="SCHOOLMAP.getSchools()">
         <option value="" selected="selected">all</option>
     </select>
     <b>no. schools:</b>
-    <select name="limit" onchange="getSchools()">
+    <select name="limit" onchange="SCHOOLMAP.getSchools()">
         <option value="1">1</option>
         <option value="5">5</option>
         <option value="10">10</option>
@@ -67,25 +61,38 @@
         <option value="50">50</option>
     </select>
     <b>order by:</b>
-    <select name="order_by" onchange="getSchools()">
+    <select name="order_by" onchange="SCHOOLMAP.getSchools()">
         <option value="">-</option>
         <option value="primary">Key stage 2 results</option>
         <option value="ks3">Key stage 3 results</option>
         <option value="secondary">GCSE results</option>
         <option selected="selected" value="post16">GCE and VCE results</option>
     </select>
-    </div>
-</td>
-</tr></table>
+</div>
 </form>
 <hr />
 <table width="100%">
     <tr>
+        <td>
+            <form action="/" onsubmit="return false">
+                <fieldset>
+                    <legend>Search</legend>
+                    <select name="search_type">
+                        <option value="address">address</option>
+                        <option value="school">school</option>
+                    </select>
+                    <input size="10" name="query" />
+                    <input type="submit" name="gotobutton" value="goto" onclick="SCHOOLMAP.find( this.form.search_type.value, this.form.query.value ); return false" />
+                </fieldset>
+            </form>
+        </td>
+        <td valign="top" rowspan="2">
+            <div id="list"></div>
+        </td>
+    </tr>
+    <tr>
         <td id="mapTd" valign="top">
             <div id="map" style="border: 1px solid black; width: 500px; height: 600px;"></div>
-        </td>
-        <td valign="top">
-            <div id="list"></div>
         </td>
     </tr>
 </table>
