@@ -17,10 +17,19 @@ use JSON;
 
 open( STDERR, ">>/var/www/www.schoolmap.org.uk/logs/acronyms.log" );
 warn "$$ at ", scalar( localtime ), "\n";
-my %formdata = ( format => "json", CGI::Lite->new->parse_form_data() );
+my %formdata = ( CGI::Lite->new->parse_form_data() );
 warn map "$_ = $formdata{$_}\n", keys %formdata if %formdata;
-print "Content-Type: application/json\n\n";
-print to_json( \%Acronyms::special );
+# print "Content-Type: application/json\n\n";
+print "Content-Type: text/plain\n\n";
+my $acronyms = Acronyms->new();
+if ( exists $formdata{specials} )
+{
+    print to_json( { $acronyms->specials } );
+}
+if ( exists $formdata{age_range} )
+{
+    print to_json( [ $acronyms->age_range ] );
+}
 
 #------------------------------------------------------------------------------
 #

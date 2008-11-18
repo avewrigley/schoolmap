@@ -51,9 +51,9 @@ my %types = (
     },
 );
 my %opts;
-my @opts = qw( force flush type=s force silent pidfile! verbose );
+my @opts = qw( force flush region=s la=s type=s force silent pidfile! verbose );
 
-my ( $dbh, $sc );
+my ( $dbh, $sc, $acronyms );
 
 sub update_school
 {
@@ -112,8 +112,15 @@ sub update_school
         $isth->execute( $school{dcsf_id}, $acronym, $type );
     }
     my ( $age_range ) = grep /\d+-\d+/, @acronyms;
-    warn "age range: $age_range\n" if $age_range;
-    my ( $special ) = grep { exists $Acronyms::special{$_} } @acronyms;
+    my ( $min_age, $max_age );
+    if ( $age_range )
+    {
+        warn "age range: $age_range\n";
+        ( $min_age, $max_age ) = $age_range =~ /(\d+)-(\d+)/;
+        warn "min age: $min_age\n";
+        warn "max age: $max_age\n";
+    }
+    my ( $special ) = grep { $acronyms->special( $_ ) } @acronyms;
     warn "special: $special\n" if $special;
     my $select_sql = "SELECT * FROM dcsf WHERE dcsf_id = ?";
     my $select_sth = $dbh->prepare( $select_sql );
@@ -122,18 +129,18 @@ sub update_school
     if ( @row )
     {
         my $update_sql = <<EOF;
-UPDATE dcsf SET special=?, age_range=?, ${type}_url=?, average_${type}=?, pupils_${type}=?, type=? WHERE dcsf_id = ?
+UPDATE dcsf SET special=?, min_age=?, max_age=?, age_range=?, ${type}_url=?, average_${type}=?, pupils_${type}=?, type=? WHERE dcsf_id = ?
 EOF
         my $update_sth = $dbh->prepare( $update_sql );
-        $update_sth->execute( $special, $age_range, $url, $score, $pupils, $type, $school{dcsf_id} );
+        $update_sth->execute( $special, $min_age, $max_age, $age_range, $url, $score, $pupils, $type, $school{dcsf_id} );
     }
     else
     {
         my $insert_sql = <<EOF;
-INSERT INTO dcsf (special,age_range,${type}_url,average_${type},pupils_${type},type,dcsf_id) VALUES(?,?,?,?,?,?,?)
+INSERT INTO dcsf (special,min_age,max_age,age_range,${type}_url,average_${type},pupils_${type},type,dcsf_id) VALUES(?,?,?,?,?,?,?,?,?)
 EOF
         my $insert_sth = $dbh->prepare( $insert_sql );
-        $insert_sth->execute( $special,$age_range, $url, $score, $pupils, $type, $school{dcsf_id} );
+        $insert_sth->execute( $special, $min_age, $max_age, $age_range, $url, $score, $pupils, $type, $school{dcsf_id} );
     }
 }
 
@@ -149,6 +156,7 @@ if ( $opts{pidfile} )
 my $logfile = "$Bin/logs/dcsf.log";
 $dbh = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
 $sc = CreateSchool->new( dbh => $dbh );
+$acronyms = Acronyms->new();
 unless ( $opts{verbose} )
 {
     open( STDERR, ">$logfile" ) or die "can't write to $logfile\n";
@@ -175,6 +183,7 @@ for my $type ( @types )
         my $url = $region->url_abs;
         my $text = $region->text;
         warn "\t$text\n";
+        next if $opts{region} && $opts{region} ne $text;
         $mech->get( $url );
         die "no la regex\n" unless my $la_regex = $types{$type}{la_regex};
         my @las = $mech->find_all_links( url_regex => $la_regex );
@@ -182,6 +191,7 @@ for my $type ( @types )
         {
             my $url = $la->url_abs;
             my $text = $la->text;
+            next if $opts{la} && $opts{la} ne $text;
             warn "\t\t$text\n";
             $mech->get( $url );
             while ( 1 )
