@@ -24,7 +24,7 @@ CREATE TABLE `acronym` (
   `acronym` varchar(255) NOT NULL,
   `dcsf_id` int(10) unsigned NOT NULL,
   `type` varchar(255) NOT NULL,
-  PRIMARY KEY  (`acronym`,`dcsf_id`, `type` )
+  PRIMARY KEY  (`acronym`,`dcsf_id`,`type`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -45,7 +45,6 @@ CREATE TABLE `address` (
 
 DROP TABLE IF EXISTS `dcsf`;
 CREATE TABLE `dcsf` (
-  `type` varchar(255) NOT NULL,
   `pupils_primary` int(11) default NULL,
   `dcsf_id` int(10) unsigned NOT NULL,
   `average_secondary` float default NULL,
@@ -59,6 +58,10 @@ CREATE TABLE `dcsf` (
   `average_ks3` float default '0',
   `pupils_ks3` int(11) default '0',
   `average_primary` float default NULL,
+  `age_range` varchar(255) default NULL,
+  `special` varchar(255) default NULL,
+  `max_age` int(11) default NULL,
+  `min_age` int(11) default NULL,
   PRIMARY KEY  (`dcsf_id`),
   KEY `urls` (`secondary_url`,`primary_url`),
   KEY `urls2` (`ks3_url`,`post16_url`),
@@ -85,6 +88,17 @@ CREATE TABLE `ofsted` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
+-- Table structure for table `ofsted_dcsf`
+--
+
+DROP TABLE IF EXISTS `ofsted_dcsf`;
+CREATE TABLE `ofsted_dcsf` (
+  `dcsf_id` int(10) unsigned NOT NULL,
+  `ofsted_id` int(10) unsigned NOT NULL,
+  PRIMARY KEY  (`ofsted_id`,`dcsf_id`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
 -- Table structure for table `postcode`
 --
 
@@ -108,16 +122,44 @@ CREATE TABLE `school` (
   `name` varchar(100) NOT NULL default '',
   `postcode` varchar(100) NOT NULL default '',
   `address` varchar(255) default '',
-  `dfes_id` int(10) unsigned default NULL,
   `ofsted_id` int(10) unsigned default NULL,
   `dcsf_id` int(10) unsigned default NULL,
   PRIMARY KEY  (`postcode`,`name`),
-  KEY `dfes_id` (`dfes_id`),
   KEY `ofsted_id` (`ofsted_id`),
   KEY `postcode` (`postcode`),
   KEY `name` (`name`),
   KEY `dcsf_id` (`dcsf_id`)
 ) ENGINE=MyISAM AUTO_INCREMENT=108604 DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `school_list`
+--
+
+DROP TABLE IF EXISTS `school_list`;
+CREATE TABLE `school_list` (
+  `URN` int(11) default NULL,
+  `LA` int(11) default NULL,
+  `LA_NAME` varchar(11) default NULL,
+  `ESTAB` int(11) default NULL,
+  `SCHOOL_NAME` varchar(255) default NULL,
+  `STREET` varchar(255) default NULL,
+  `LOCALITY` varchar(255) default NULL,
+  `ADDRESS 3` varchar(255) default NULL,
+  `TOWN` varchar(255) default NULL,
+  `COUNTY` varchar(255) default NULL,
+  `POSTCODE` varchar(11) default NULL,
+  `TEL_STD` int(11) default NULL,
+  `TEL_NO` int(11) default NULL,
+  `HEAD_TITLE` varchar(11) default NULL,
+  `HEAD_FIRST` varchar(255) default NULL,
+  `HEAD_LAST` varchar(255) default NULL,
+  `HEAD_HONOUR` varchar(255) default NULL,
+  `TYPE_OF_ESTAB` varchar(255) default NULL,
+  `PHASE_OF_ED` varchar(255) default NULL,
+  `STAT_LOW_AGE` int(11) default NULL,
+  `STAT HIGH AGE` int(11) default NULL,
+  KEY `URN` (`URN`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8;
 
 --
 -- Table structure for table `url`
@@ -140,4 +182,4 @@ CREATE TABLE `url` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2008-11-14 17:08:09
+-- Dump completed on 2008-11-26 17:22:30

@@ -11,39 +11,63 @@ use Data::Dumper;
 sub get_location
 {
     my $self = shift;
-    my $address = shift;
+    my $school = shift;
     my %opts = @_;
 
-    die "no using parameter\n" unless my $using = $opts{using};
-    warn "looking up $address using $using ...\n";
-    if ( $using eq 'google' )
+    my @coords = $self->{geopostcode}->coords( $school->{postcode} );
+    return @coords if @coords == 2 && $coords[0] && $coords[1];
+    die "no using parameter\n" unless $opts{using};
+    my $address = $school->{address};
+    my @address = split( ",", $address );
+    my $postcode = $address[-1];
+    for my $field ( $address, $postcode )
     {
-        my $response = $self->{geogoogle}->geocode( location => $address );
-        if ( $response->{Status}{code} == 620 )
+        for my $using ( @{$opts{using}} )
         {
-            die "Too many geocoding queries\n";
+            warn "looking up $field using $using ...\n";
+            if ( $using eq 'google' )
+            {
+                my $response = $self->{geogoogle}->geocode( location => $field );
+                if ( $response->{Status}{code} == 620 )
+                {
+                    warn "Too many geocoding queries\n";
+                }
+                if ( $response->{Status}{code} != 200 )
+                {
+                    warn "geocoding query failed: $response->{Status}{code}\n";
+                }
+                else
+                {
+                    my $location = $response->{Placemark}[0];
+                    if ( $location )
+                    {
+                        @coords = @{ $location->{Point}{coordinates} };
+                        return @coords if @coords == 2 && $coords[0] && $coords[1];
+                    }
+                    else
+                    {
+                        warn "failed to get location from $using for $field\n";
+                    }
+                }
+            }
+            elsif ( $using eq 'yahoo' )
+            {
+                my $response = $self->{geoyahoo}->geocode( location => $field );
+                my $location = $response->[0];
+                if ( $location )
+                {
+                    warn "found $location->{longitude}, $location->{latitude}\n";
+                    @coords = ( $location->{longitude}, $location->{latitude} );
+                    return @coords if @coords == 2 && $coords[0] && $coords[1];
+                }
+            }
+            else
+            {
+                die "don't know how to lookup using $using\n";
+            }
         }
-        if ( $response->{Status}{code} != 200 )
-        {
-            die "geocoding query failed: $response->{Status}{code}\n";
-        }
-        my $location = $response->{Placemark}[0];
-        die "failed to get location for $address\n" unless $location;
-        my $coords = $location->{Point}{coordinates};
-        return @$coords;
     }
-    elsif ( $using eq 'yahoo' )
-    {
-        my $response = $self->{geoyahoo}->geocode( location => $address );
-        my $location = $response->[0];
-        die "failed to get location for $address:\n", Dumper( $response ), "\n" unless $location;
-        warn "found $location->{longitude}, $location->{latitude}\n";
-        return ( $location->{longitude}, $location->{latitude} );
-    }
-    else
-    {
-        die "don't know how to lookup using $using\n";
-    }
+    die "no lat / lon\n";
 }
 
 sub create_school
@@ -58,8 +82,6 @@ sub create_school
     my $postcode = $school{postcode};
     my $id_key = $type . "_id";
     die "no $id_key" unless $school{$id_key};
-    my $type_key = $type . "_type";
-    die "no $type_key" unless $school{$type_key};
     $school{postcode} = uc( $school{postcode} );
     $school{postcode} =~ s/[^0-9A-Z]//g;
     # warn "lookup @school{qw(postcode name)} ...\n";
@@ -69,23 +91,23 @@ sub create_school
     if ( $school )
     {
         # warn "UPDATE $school->{name}\n";
-        my $usth = $self->{dbh}->prepare( "UPDATE school SET ${type}_id = ?, ${type}_type = ? WHERE postcode = ? AND name = ?" );
-        my $school = $usth->execute( @school{$id_key, $type_key, qw(postcode name)} );
+        my $usth = $self->{dbh}->prepare( "UPDATE school SET ${type}_id = ? WHERE postcode = ? AND name = ?" );
+        $usth->execute( @school{$id_key, qw(postcode name)} );
         return;
     }
     warn "new school: $school{name}\n";
-    unless ( $school{lat} && $school{lon} )
+    if ( $school{lat} && $school{lon} )
     {
-        ( $school{lon}, $school{lat} ) = $self->get_location( $school{address}, using => "yahoo" );
-        die "no lat / lon for postcode $school{postcode}" 
-            unless $school{lat} && $school{lon}
-        ;
+        $self->{geopostcode}->add( $school{postcode}, $school{lat}, $school{lon} );
     }
-    $self->{geopostcode}->add( $school{postcode}, $school{lat}, $school{lon} );
+    else
+    {
+        ( $school{lon}, $school{lat} ) = $self->get_location( \%school, using => [ "yahoo", "google" ] );
+    }
     my $isth = $self->{dbh}->prepare( <<SQL );
-REPLACE INTO school ( $id_key, $type_key, name, postcode, address ) VALUES ( ?,?,?,?,? )
+REPLACE INTO school ( $id_key, name, postcode, address ) VALUES ( ?,?,?,? )
 SQL
-    $isth->execute( @school{$id_key, $type_key, qw( name postcode address )} );
+    $isth->execute( @school{$id_key, qw( name postcode address )} );
 }
 
 my $google_api_key = "ABQIAAAAzvdwQCWLlw5TXpo7sNhCSRTpDCCGWHns9m2oc9sQQ_LCUHXVlhS7v4YbLZCNgHXnaepLqcd-J0BBDw";
@@ -96,7 +118,7 @@ sub new
     my %args = @_;
     my $self = bless \%args, $class;
     die "no dbh\n" unless $self->{dbh};
-    $self->{geopostcode} = Geo::Postcode->new( backoff => $args{backoff_postcodes} );
+    $self->{geopostcode} = Geo::Postcode->new( );
     $self->{geoyahoo} = Geo::Coder::Yahoo->new( appid => $yahoo_api_key );
     $self->{geogoogle} = Geo::Coder::Google->new(
         apikey => $google_api_key,

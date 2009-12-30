@@ -7,7 +7,6 @@ use warnings;
 
 use vars qw( $VERSION );
 
-use Carp;
 use DBI;
 
 sub new
@@ -16,7 +15,7 @@ sub new
     my %args = @_;
     my $self = bless \%args, $class;
     $self->{dbh} = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap' )
-        or croak "Cannot connect: $DBI::errstr"
+        or die "Cannot connect: $DBI::errstr"
     ;
     return $self;
 }
@@ -33,9 +32,9 @@ sub coords
     my $self = shift;
     my $postcode = shift;
     my %output = $self->find( $postcode );
-    my ( $lat, $lon ) = @output{qw(lat lon)};
-    croak "no lat / lon for $postcode" unless defined $lat && defined $lon;
-    return ( $lat, $lon );
+    my ( $lon, $lat ) = @output{qw(lon lat)};
+    # die "no lon / lat for $postcode" unless defined $lon && defined $lat;
+    return $lon && $lat ? ( $lon, $lat ) : ();
 }
 
 sub find
@@ -52,21 +51,6 @@ sub find
     {
         warn "found coords $output->{lat},$output->{lon} in db for $postcode\n";
         return %{$output};
-    }
-    if ( $self->{backoff} )
-    {
-        while ( length( $postcode ) >= 3 )
-        {
-            chop( $postcode );
-            warn "backing off to $postcode\n";
-            $sth->execute( $postcode );
-            $output = $sth->fetchrow_hashref;
-            if ( $output )
-            {
-                warn "found coords $output->{lat},$output->{lon} in db for $postcode\n";
-                return %{$output};
-            }
-        }
     }
     warn "no entry in db for $postcode\n";
     return;

@@ -48,6 +48,25 @@ sub json
     print to_json( $schools );
 }
 
+sub types
+{
+    my $self = shift;
+    my ( $where, @args ) = $self->geo_where();
+    my $sql = "SELECT COUNT(*) FROM ofsted,school,postcode $where";
+    my $sth = $self->{dbh}->prepare( $sql );
+    $sth->execute( @args );
+    my ( $all ) = $sth->fetchrow;
+    my @types = ( { val => "", str => "all ($all)" } );
+    $sql = "SELECT type, COUNT(*) FROM ofsted,school,postcode $where GROUP BY type";
+    my $sth = $self->{dbh}->prepare( $sql );
+    $sth->execute( @args );
+    while ( my ( $type, $count ) = $sth->fetchrow )
+    {
+        push( @types, { val => $type, str => "$type ($count)" } );
+    }
+    print to_json( \@types );
+}
+
 sub xml
 {
     my $self = shift;
@@ -56,17 +75,12 @@ sub xml
     $self->process_template( "school.$self->{format}", $schools );
 }
 
-sub get_schools
+sub where
 {
     my $self = shift;
     my @args;
-    my @what = ( "*" );
-    my $what = join( ",", @what );
     my @where = ( 
         "school.postcode = postcode.code", 
-        "school.ofsted_id = ofsted.ofsted_id",
-        "school.ofsted_type IS NOT NULL",
-        "school.dcsf_id = dcsf.dcsf_id",
     );
     if ( $self->{minLon} && $self->{maxLon} && $self->{minLat} && $self->{maxLat} )
     {
@@ -91,10 +105,10 @@ sub get_schools
         push( @where, "dcsf.min_age <= ? AND dcsf.max_age >= ?" );
         push( @args, $self->{age}, $self->{age} );
     }
-    if ( $self->{ofsted_type} )
+    if ( $self->{type} )
     {
-        push( @where, "school.ofsted_type = ?" );
-        push( @args, $self->{ofsted_type} );
+        push( @where, "ofsted.type = ?" );
+        push( @args, $self->{type} );
     }
     if ( $self->{find_school} )
     {
@@ -102,19 +116,67 @@ sub get_schools
         push( @args, "%" . $self->{find_school} ."%" );
     }
     my $where = @where ? "WHERE " . join( " AND ", @where ) : '';
-    my @from = ( "dcsf", "postcode", "school" );
-    $self->{from} = "FROM " . join( ",", @from );
+    return ( $where, @args );
+}
+
+sub geo_where
+{
+    my $self = shift;
+    my @args;
+    my @where = ( 
+        "school.postcode = postcode.code", 
+        "school.ofsted_id = ofsted.ofsted_id",
+    );
+    if ( $self->{minLon} && $self->{maxLon} && $self->{minLat} && $self->{maxLat} )
+    {
+        push( 
+            @where,
+            (
+                "postcode.lon > ?",
+                "postcode.lon < ?",
+                "postcode.lat > ?",
+                "postcode.lat < ?",
+            )
+        );
+        push( @args, $self->{minLon}, $self->{maxLon}, $self->{minLat}, $self->{maxLat} );
+    }
+    my $where = @where ? "WHERE " . join( " AND ", @where ) : '';
+    return ( $where, @args );
+}
+
+sub get_schools
+{
+    my $self = shift;
+    my @what = ( "*" );
+    my $what = join( ",", @what );
+    my ( $where, @args ) = $self->where;
+    my @from = ( "postcode", "school" );
+    # my %join = ( "dcsf" => "dcsf_id", "ofsted" => "ofsted_id" ); # , "school_list" => "ofsted_id" );
+    my %join = ( 
+        "school_list" => "ON school.ofsted_id = school_list.URN",
+        "ofsted" => "ON school.ofsted_id = ofsted.ofsted_id",
+        "dcsf" => "ON school.dcsf_id = dcsf.dcsf_id",
+    );
+    my $from = join( ",", @from );
+    my $join = join( " ", map "LEFT JOIN $_ $join{$_}", keys %join );
     my $sql = <<EOF;
-SELECT SQL_CALC_FOUND_ROWS $what FROM postcode, school, ofsted, dcsf
+SELECT SQL_CALC_FOUND_ROWS $what FROM $from $join
     $where
 EOF
     if ( $self->{order_by} )
     {
         $sql .= " ORDER BY average_$self->{order_by} DESC";
     }
-    my $limit = 50;
-    $limit = $self->{limit} if defined $self->{limit};
-    $sql .= " LIMIT $limit";
+    else
+    {
+        $sql .= " ORDER BY name";
+    }
+    unless ( $self->{limit} eq 'all' || $self->{nolimit} )
+    {
+        my $limit = 50;
+        $limit = $self->{limit} if defined $self->{limit};
+        $sql .= " LIMIT $limit";
+    }
     warn "$sql\n";
     warn "ARGS: @args\n";
     my $sth = $self->{dbh}->prepare( $sql );

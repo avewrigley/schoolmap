@@ -12,6 +12,7 @@ use warnings;
 
 use FindBin qw( $Bin );
 use WWW::Mechanize;
+use LWP::UserAgent;
 use Pod::Usage;
 use Getopt::Long;
 use Proc::Pidfile;
@@ -21,39 +22,61 @@ use DBI;
 use lib "$Bin/lib";
 require CreateSchool;
 use Acronyms;
+use vars qw( %types @types );
 
 my $postcode_regex = qr{^([A-PR-UWYZ0-9][A-HK-Y0-9][AEHMNPRTVXY0-9]?[ABEHMNPRVWXY0-9]? {1,2}[0-9][ABD-HJLN-UW-Z]{2}|GIR 0AA)$}i;
 
-my %types = (
-    primary => {
-        type_regex => qr/2007 Primary School \(Key Stage 2\)/i,
-        la_regex => qr/Mode=Z&Type=LA&No=\d+&.*&Phase=p/,
-        pupils_index => 1,
-        score_index => 15,
-    },
-    ks3 => {
-        type_regex => qr/2007 Secondary School \(Key Stage 3\)/i,
-        la_regex => qr/Mode=Z&Type=LA&No=\d+&.*&Phase=k/,
-        pupils_index => 1,
-        score_index => 15,
-    },
-    secondary => {
-        type_regex => qr/2007 Secondary School \(GCSE and equivalent\)/i,
-        la_regex => qr/Mode=Z&Type=LA&No=\d+&.*&Phase=1/,
-        pupils_index => 1,
-        score_index => 15,
-    },
-    post16 => {
-        type_regex => qr/2007 School and College \(post-16\)/i,
-        la_regex => qr/Mode=Z&Type=LA&No=\d+&.*&Phase=2/,
-        pupils_index => 1,
-        score_index => 3,
-    },
-);
-my %opts;
-my @opts = qw( force flush region=s la=s type=s force silent pidfile! verbose );
+sub get_types
+{
+    my $year = shift;
+    return (
+        primary => {
+            type_regex => qr/$year Primary School \(Key Stage 2\)/,
+            la_regex => qr/Mode=Z&Type=LA&.*?No=\d+&.*?&Phase=p/,
+            school_regex => qr/Mode=Z&Type=LA.*?&Phase=p&Year=\d+&Base=a&Num=\d+/,
+            pupils_index => 1,
+            score_index => 16,
+            details_regex => qr{<dt>Address:</dt>.*?<dd>(.*?)</dd>}sim,
+        },
+        # ks3 => {
+        # type_regex => qr/$year Secondary School \(Key Stage 3\)/,
+        # la_regex => qr/Mode=Z&Type=LA&.*?No=\d+&.*?&Phase=k/,
+        # school_regex => qr/Mode=Z&Type=LA.*?&Phase=k&Year=\d+&Base=a&Num=\d+/,
+        # pupils_index => 1,
+        # score_index => 15,
+        # details_regex => qr{<dt>Address:</dt>.*?<dd>(.*?)</dd>}sim,
+        # },
+        secondary => {
+            type_regex => qr/$year Secondary School \(GCSE and equivalent\)/,
+            la_regex => qr/Mode=Z&Type=LA&.*?No=\d+&.*?&Phase=1/,
+            school_regex => qr/Mode=Z&Type=LA.*?&Phase=1&Year=\d+&Base=a&Num=\d+/,
+            pupils_regex => qr{<dt>Number of pupils at the end of Key Stage 4</dt>.*?<dd>(\d*)</dd>}sim,
+            score_index => 10,
+            table_tab => "KS4 Results",
+            details_regex => qr{<dt>Address:</dt>.*?<dd>(.*?)</dd>}sim,
+        },
+        post16 => {
+            type_regex => qr/$year School and College \(post-16\)/,
+            la_regex => qr/Mode=Z&Type=LA&No=\d+&.*&Phase=2/,
+            school_regex => qr/Mode=Z&Type=LA&Phase=2&Year=\d+&Base=a&Num=\d+/,
+            pupils_index => 1,
+            details_regex => qr{<dt>Address:</dt>.*?<dd>(.*?)</dd>}sim,
+            score_index => 3,
+        },
+    );
+}
 
-my ( $dbh, $sc, $acronyms );
+my %opts;
+my @opts = qw( year=s force flush region=s la=s school=s type=s force silent pidfile! verbose );
+
+my ( $dbh, $sc, $acronyms, %done );
+
+sub get_id
+{
+    my $url = shift;
+    my ( $id ) = $url =~ m{No=(\d+)};
+    return $id;
+}
 
 sub update_school
 {
@@ -61,49 +84,109 @@ sub update_school
     my $school_name = shift;
     my $url = shift;
     my $row = shift;
-    my %school = ( name => $school_name, dcsf_type => $type );
-    ( $school{dcsf_id} ) = $url =~ m{No=(\d+)};
+    my %school = ( name => $school_name );
+    $school{dcsf_id} = get_id( $url );
+    die "no id for $url\n" unless $school{dcsf_id};
     my $mech = WWW::Mechanize->new();
     $mech->get( $url );
     my $html = $mech->content();
-    my ( $details ) = $html =~ m{<dl id="details">(.*?)</dl>}sim;
-    my @dds = grep /\w/, map decode_entities( $_ ), $details =~ m{<dd>([^<]*?)</dd>}gi;
-    my @address;
-    for my $dd ( @dds )
+    unless ( $html )
     {
-        push( @address, $dd );
-        if ( $dd =~ $postcode_regex )
+        warn "failed to get $url\n";
+        return;
+    }
+    my $details_regex = $types{$type}{details_regex};
+    die "no details regex\n" unless $details_regex;
+    my ( $details ) = $html =~ $details_regex;
+    warn "Can't find details\n" and return unless $details;
+    my @lines = split( /<br\s*\/>/sim, $details );
+    s/\s*$// for @lines; s/^\s*// for @lines;
+    @lines = grep /\w/, map decode_entities( $_ ), @lines;
+    my @address;
+    for my $line ( @lines )
+    {
+        push( @address, $line );
+        if ( $line =~ $postcode_regex )
         {
-            $school{postcode} = $dd;
+            $school{postcode} = $line;
             last;
         }
     }
     $school{address} = join( ",", @address );
     unless ( $school{postcode} )
     {
-        die "no postcode for $school{name} $school{address} ($url)\n";
+        warn "combined schools ...\n";
+        die "no school regex\n" unless my $school_regex = $types{$type}{school_regex};
+        my @schools = $mech->find_all_links( url_regex => $school_regex );
+        for my $school ( @schools )
+        {
+            my $url = $school->url_abs;
+            my $text = $school->text;
+            my $id = get_id( $url );
+            warn "trying $text ($id)\n";
+            if ( $done{$id} )
+            {
+                warn "$text done\n";
+            }
+            else
+            {
+                die "no postcode for $school{name} $school{address} ($url)\n";
+            }
+        }
+        warn "All combined schools found\n";
+        return;
     }
     $sc->create_school( 'dcsf', %school );
     my ( $score, $pupils );
     if ( my $i = $types{$type}{score_index} )
     {
         $score = $row->[$i];
+        $score =~ s/\s*$//; $score =~ s/^\s*//;
+        warn "no score\n" unless $score;
+        unless ( $score =~ /^([\d\.]+)$/ )
+        {
+            warn "'$score' is not numeric\n";
+            $score = undef;
+        }
     }
     else
     {
-        die "no score index\n";
+        warn "no score index\n";
     }
-    die "no score\n" unless $score;
-    if ( my $i = $types{$type}{pupils_index} )
+    if ( my $regex = $types{$type}{pupils_regex} )
+    {
+        ( $pupils ) = $html =~ $types{$type}{pupils_regex};
+    }
+    elsif ( my $i = $types{$type}{pupils_index} )
     {
         $pupils = $row->[$i];
+        if ( $pupils )
+        {
+            $pupils =~ s/\s*$//; $pupils =~ s/^\s*//;
+            unless ( $pupils =~ /^(\d+)$/ )
+            {
+                warn "$pupils is not an integer\n";
+                $pupils = undef;
+            }
+        }
+        else
+        {
+            warn "no pupils\n";
+        }
     }
     else
     {
-        die "no pupils index\n";
+        warn "no pupils index / regex\n";
     }
-    die "no pupils\n" unless $pupils;
+    return unless $score && $pupils;
+    # <body onload="SmallMap('gmapSmall',13,null,null,null,50.808378717675,0.241684204290,null,2)">
+    my ( $lat, $lon ) = $html =~ /SmallMap\('gmapSmall',[^,]+,[^,]+,[^,]+,[^,]+,([\d\-\.]+),([\d\-\.]+),[^,]+,[^,]+\)/;
+    if ( $lat && $lon )
+    {
+        $school{lat} = $lat, $school{lon} = $lon;
+    }
     my @acronyms = $html =~ m{<a .*?class="acronym".*?>(.*?)</a>}gism;
+    warn "\t\t\t(lat:$lat, lon:$lon, score:$score, pupils:$pupils, acronyms:@acronyms)\n";
     my $dsth = $dbh->prepare( "DELETE FROM acronym WHERE dcsf_id = ?" );
     my $isth = $dbh->prepare( "INSERT INTO acronym ( dcsf_id, acronym, type ) VALUES ( ?,?,? )" );
     $dsth->execute( $school{dcsf_id} );
@@ -115,38 +198,36 @@ sub update_school
     my ( $min_age, $max_age );
     if ( $age_range )
     {
-        warn "age range: $age_range\n";
         ( $min_age, $max_age ) = $age_range =~ /(\d+)-(\d+)/;
-        warn "min age: $min_age\n";
-        warn "max age: $max_age\n";
     }
     my ( $special ) = grep { $acronyms->special( $_ ) } @acronyms;
-    warn "special: $special\n" if $special;
-    my $select_sql = "SELECT * FROM dcsf WHERE dcsf_id = ?";
+    my $select_sql = "SELECT dcsf_id FROM dcsf WHERE dcsf_id = ?";
     my $select_sth = $dbh->prepare( $select_sql );
     $select_sth->execute( $school{dcsf_id} );
-    my @row = $select_sth->fetchrow;
-    if ( @row )
+    if ( $select_sth->fetchrow )
     {
         my $update_sql = <<EOF;
-UPDATE dcsf SET special=?, min_age=?, max_age=?, age_range=?, ${type}_url=?, average_${type}=?, pupils_${type}=?, type=? WHERE dcsf_id = ?
+UPDATE dcsf SET ${type}_url = ?, average_${type} = ?, pupils_${type} = ? WHERE dcsf_id = ?
 EOF
         my $update_sth = $dbh->prepare( $update_sql );
-        $update_sth->execute( $special, $min_age, $max_age, $age_range, $url, $score, $pupils, $type, $school{dcsf_id} );
+        $update_sth->execute( $url, $score, $pupils, $school{dcsf_id} );
     }
     else
     {
         my $insert_sql = <<EOF;
-INSERT INTO dcsf (special,min_age,max_age,age_range,${type}_url,average_${type},pupils_${type},type,dcsf_id) VALUES(?,?,?,?,?,?,?,?,?)
+INSERT INTO dcsf (special,min_age,max_age,age_range,${type}_url,average_${type},pupils_${type},dcsf_id) VALUES(?,?,?,?,?,?,?,?)
 EOF
         my $insert_sth = $dbh->prepare( $insert_sql );
-        $insert_sth->execute( $special, $min_age, $max_age, $age_range, $url, $score, $pupils, $type, $school{dcsf_id} );
+        $insert_sth->execute( $special, $min_age, $max_age, $age_range, $url, $score, $pupils, $school{dcsf_id} );
     }
+    $done{$school{dcsf_id}} = $school_name;
 }
 
 # Main
 
 $opts{pidfile} = 1;
+$opts{year} = ( localtime )[5];
+$opts{year} += 1900;
 GetOptions( \%opts, @opts ) or pod2usage( verbose => 0 );
 my $pp;
 if ( $opts{pidfile} )
@@ -161,55 +242,81 @@ unless ( $opts{verbose} )
 {
     open( STDERR, ">$logfile" ) or die "can't write to $logfile\n";
 }
-my $mech = WWW::Mechanize->new();
-my $te = HTML::TableExtract->new();
+my $te = HTML::TableExtract->new( keep_html => 1 );
 
-my @types = $opts{type} ? ( $opts{type} ) : keys %types;
+%types = get_types( $opts{year} );
+@types = $opts{type} ? ( $opts{type} ) : keys %types;
 for my $type ( @types )
 {
+    die "unknown type $type\n" unless $types{$type};
     warn "getting performance tables for $type\n";
+    my $mech = WWW::Mechanize->new();
     $mech->get( 'http://www.dcsf.gov.uk/' );
     unless ( $mech->follow_link( text_regex => qr/performance tables/i ) )
     {
         die "failed to find performance tables\n";
     }
-    unless ( $mech->follow_link( text_regex => $types{$type}{type_regex} ) )
+    warn "performance tables at ", $mech->uri(), "\n";
+    my $type_regex = $types{$type}{type_regex};
+    warn "Trying $type_regex ...\n";
+    if ( ! $mech->follow_link( text_regex => $type_regex ) )
     {
-        die "failed to find $type performance tables ($types{$type})\n";
+        warn "failed to find link matching $type_regex!\n";
+        next;
     }
+    my $success = 0;
     my @regions = $mech->find_all_links( url_regex => qr/\/region\d+/ );
     for my $region ( @regions )
     {
         my $url = $region->url_abs;
-        my $text = $region->text;
-        warn "\t$text\n";
-        next if $opts{region} && $opts{region} ne $text;
-        $mech->get( $url );
+        my $response = $mech->get( $url );
+        unless ( $response->is_success )
+        {
+            warn "failed to get $url\n";
+            next;
+        }
+        my $content = $response->content;
+        my ( $title ) = $content =~ m{<title>(.*?)</title>}sim;
+        my $region_name = $title;
+        warn "$type\t$title ($url)\n";
+        next if $opts{region} && $opts{region} ne $region_name;
         die "no la regex\n" unless my $la_regex = $types{$type}{la_regex};
         my @las = $mech->find_all_links( url_regex => $la_regex );
         for my $la ( @las )
         {
             my $url = $la->url_abs;
-            my $text = $la->text;
-            next if $opts{la} && $opts{la} ne $text;
-            warn "\t\t$text\n";
+            my $la_name = $la->text;
+            next if $opts{la} && $opts{la} ne $la_name;
+            warn "$type\t$region_name\t$la_name ($url)\n";
             $mech->get( $url );
+            if ( $types{$type}{table_tab} )
+            {
+                warn "click on $types{$type}{table_tab}\n";
+                unless ( $mech->follow_link( text => $types{$type}{table_tab} ) )
+                {
+                    warn "failed\n";
+                    next;
+                }
+            }
             while ( 1 )
             {
                 my $html = $mech->content();
                 $te->parse( $html );
+                my @tables = $te->tables;
                 foreach my $ts ( $te->tables ) {
                     foreach my $row ( $ts->rows ) {
-                        my $school_name = $row->[0];
+                        my $school_html = $row->[0];
+                        next unless $school_html;
+                        my ( $school_url, $school_name ) = $school_html =~ m{<a .*?href="(.*?)".*?>(.*?)</a>}sim;
+                        next unless $school_name && $school_url;
                         next unless $school_name && $school_name =~ /\S/;
-                        $school_name =~ s/^\s*//;
-                        $school_name =~ s/\s*$//;
-                        my ( $school_link ) = $mech->find_all_links( text => $school_name );
-                        next unless $school_link;
-                        my $url = $school_link->url_abs;
-                        warn "\t\t\t$school_name\n";
+                        $school_url = decode_entities( $school_url );
+                        my $u1 = URI::URL->new( $school_url, $url );
+                        $school_url = $u1->abs;
+                        next if $opts{school} && $opts{school} ne $school_name;
+                        warn "$type\t$region_name\t$la_name\t$school_name ($school_url)\n";
                         eval {
-                            update_school( $type, $school_name, $url, $row );
+                            update_school( $type, $school_name, $school_url, $row );
                         };
                         if ( $@ )
                         {
@@ -219,7 +326,8 @@ for my $type ( @types )
                 }
                 if ( $mech->follow_link( text_regex => qr/Next \d+ schools/ ) )
                 {
-                    warn "Next page ...\n";
+                    my $next_url = $mech->uri;
+                    warn "Next page ($next_url) ...\n";
                 }
                 else
                 {
@@ -230,3 +338,4 @@ for my $type ( @types )
         }
     }
 }
+warn "$0 ($$) finished\n";

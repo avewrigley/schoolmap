@@ -21,7 +21,7 @@ use lib "$Bin/lib";
 require CreateSchool;
 
 my %opts;
-my @opts = qw( force flush type=s force silent pidfile! verbose );
+my @opts = qw( force! flush all school=s type=s urn=s silent pidfile! verbose );
 my %types = (
     primary => qr/primary schools/i,
     secondary => qr/secondary schools/i,
@@ -30,10 +30,47 @@ my %types = (
     college => qr/colleges/i,
 );
 
-my ( $dbh, $sc );
+my ( $dbh, $sc, $rsth, $ssth );
+
+sub update_school
+{
+    my %school = @_;
+    eval {
+        my $mech = WWW::Mechanize->new();
+        die "no url\n" unless $school{url};
+        warn "GET $school{url}\n";
+        my $resp = $mech->get( $school{url} );
+        my $html = $mech->content();
+        die "no HTML\n" unless $html;
+        my ( $name ) = $html =~ m{<h1 class="headingStyling">(.*?)</h1>}sim;
+        die "no name\n" unless $name;
+        $school{name} = decode_entities( $name );
+        my ( $type ) = $html =~ m{Description:\s*<span class="providerDetails">(.*?)</span>}sim;
+        $school{type} = decode_entities( $type );
+        die "no type\n" unless $school{type};
+        warn "$school{name} ($school{type})\n";
+        my @address = grep /\w/, map decode_entities( $_ ), $html =~ m{<p class="providerAddress">(.*?)</p>}gsim;
+        $school{address} = join( ",", @address );
+        $school{postcode} = $address[-1];
+        die "no postcode ($school{address})\n" unless $school{postcode};
+        $school{postcode} =~ s/^\s*//g;
+        $school{postcode} =~ s/\s*$//g;
+        $sc->create_school( 'ofsted', %school );
+        $rsth->execute( @school{qw(ofsted_id url type)} );
+    };
+    if ( $@ )
+    {
+        warn "$school{url} FAILED: $@\n";
+    }
+    else
+    {
+        warn "$school{url} SUCCESS\n";
+    }
+}
 
 # Main
 
+my $root_url =  "http://www.ofsted.gov.uk/oxedu_providers/full/(urn)/";
 $opts{pidfile} = 1;
 $opts{force} = 1;
 GetOptions( \%opts, @opts ) or pod2usage( verbose => 0 );
@@ -53,14 +90,43 @@ if ( $opts{flush} )
     }
 }
 $sc = CreateSchool->new( dbh => $dbh );
-my $ssth = $dbh->prepare( "SELECT * FROM ofsted WHERE ofsted_id = ? AND ofsted_url = ? AND type = ?" );
-my $rsth = $dbh->prepare( "REPLACE INTO ofsted ( ofsted_id, ofsted_url, type ) VALUES ( ?, ?, ? )" );
+$ssth = $dbh->prepare( "SELECT * FROM ofsted WHERE ofsted_id = ? AND ofsted_url = ? AND type = ?" );
+$rsth = $dbh->prepare( "REPLACE INTO ofsted ( ofsted_id, ofsted_url, type ) VALUES ( ?, ?, ? )" );
 unless ( $opts{verbose} )
 {
     open( STDERR, ">$logfile" ) or die "can't write to $logfile\n";
 }
+if ( $opts{all} )
+{
+    my $sql;
+    if ( $opts{force} )
+    {
+        # $sql = "SELECT URN FROM school_list ORDER BY URN";
+        $sql = "SELECT ofsted_id FROM ofsted WHERE type = ? ORDER BY ofsted_id";
+    }
+    else
+    {
+        $sql = "SELECT URN FROM school_list LEFT JOIN school ON school_list.URN = school.ofsted_id WHERE school.ofsted_id IS NULL ORDER BY URN";
+    }
+    my $sth = $dbh->prepare( $sql );
+    for my $type ( keys %types )
+    {
+        $sth->execute( $type );
+        while ( my ( $urn ) = $sth->fetchrow )
+        {
+            warn "$urn\n";
+            update_school( ofsted_id => $urn, url => "$root_url$urn" );
+        }
+    }
+    exit;
+}
+if ( $opts{urn} )
+{
+    update_school( ofsted_id => $opts{urn}, url => "$root_url$opts{urn}" );
+    exit;
+}
 my @types = $opts{type} ? ( $opts{type} ) : keys %types;
-for my $type ( @types )
+TYPE: for my $type ( @types )
 {
     warn "searching $type schools\n";
     my $mech = WWW::Mechanize->new();
@@ -88,11 +154,12 @@ for my $type ( @types )
         {
             $i++;
             my $url = $link->url_abs;
-            my %school = ( type => $type, ofsted_type => $type );
+            my %school = ( type => $type );
             ( $school{ofsted_id} ) = $url =~ $url_regex;
             $school{url} = $url;
             $school{name} = $link->text;
             warn "($i / $nreports) $type - $school{name}\n";
+            next LINK if $opts{school} && $opts{school} ne $school{name};
             $ssth->execute( @school{qw(ofsted_id url type)} );
             my $school = $ssth->fetchrow_hashref();
             if ( ! $opts{force} && $school )
@@ -100,29 +167,8 @@ for my $type ( @types )
                 warn "already seen ...\n";
                 next LINK;
             }
-            eval {
-                my $mech = WWW::Mechanize->new();
-                warn "GET $school{url}\n";
-                $mech->get( $school{url} );
-                my $html = $mech->content();
-                die "no HTML\n" unless $html;
-                my @address = grep /\w/, map decode_entities( $_ ), $html =~ m{<p class="providerAddress">(.*?)</p>}gsim;
-                $school{address} = join( ",", @address );
-                $school{postcode} = $address[-1];
-                die "no postcode ($school{address})\n" unless $school{postcode};
-                $school{postcode} =~ s/^\s*//g;
-                $school{postcode} =~ s/\s*$//g;
-                $sc->create_school( 'ofsted', %school );
-                $rsth->execute( @school{qw(ofsted_id url type)} );
-            };
-            if ( $@ )
-            {
-                warn "$school{name} FAILED: $@\n";
-            }
-            else
-            {
-                warn "$school{name} SUCCESS\n";
-            }
+            update_school( %school );
+            next TYPE if $opts{school} && $opts{school} eq $school{name};
         }
         unless ( $mech->follow_link( text_regex => qr/Next/ ) )
         {
@@ -135,5 +181,4 @@ for my $type ( @types )
         die "ERROR: $nreports expected; $i seen\n";
     }
 }
-print STDERR "$0 ($$) at ", scalar( localtime ), "\n";
 warn "$0 ($$) finished\n";

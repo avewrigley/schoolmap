@@ -24,11 +24,11 @@ print "Content-Type: text/plain\n\n";
 my $acronyms = Acronyms->new();
 if ( exists $formdata{specials} )
 {
-    print to_json( { $acronyms->specials } );
+    print to_json( $acronyms->specials );
 }
-if ( exists $formdata{age_range} )
+elsif ( exists $formdata{age_range} )
 {
-    print to_json( [ $acronyms->age_range ] );
+    print to_json( $acronyms->age_range );
 }
 
 #------------------------------------------------------------------------------
