@@ -4,7 +4,7 @@
 <school
     [%- FOREACH key IN school.keys() %]
         [%- IF school.$key.length %]
-            [% key | html %]="[% school.$key | html %]"
+            [% key.replace( '\s+', "_" ) | html %]="[% school.$key | html %]"
         [%- END %]
     [%- END %]
 />
