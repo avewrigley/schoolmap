@@ -1,0 +1,53 @@
+<form action="/" onsubmit="SCHOOLMAP.getSchools(); return false">
+    <div class="controls" >
+        <b>school type:</b>
+        <select name="type" onchange="
+                if ( this.value == 'Primary school' )
+                {
+                    this.form.order_by.value = 'primary';
+                }
+                else if ( this.value == 'Secondary school' || this.value == 'Independent school' )
+                {
+                    this.form.order_by.value = 'secondary';
+                }
+                else if ( this.value == 'Further education college' )
+                {
+                    this.form.order_by.value = 'post16';
+                }
+                SCHOOLMAP.getSchools();
+            ">
+            <option value="" selected="selected">all</option>
+        </select>
+        <b>age:</b>
+        <select name="age" onchange="SCHOOLMAP.getSchools()">
+            <option value="" selected="selected">-</option>
+        </select>
+        <b>specialism:</b>
+        <select name="special" onchange="SCHOOLMAP.getSchools()">
+            <option value="" selected="selected">all</option>
+        </select>
+        <b>no. schools:</b>
+        <select name="limit" onchange="SCHOOLMAP.getSchools()">
+            <option value="1">1</option>
+            <option value="5">5</option>
+            <option value="10">10</option>
+            <option value="15">15</option>
+            <option selected="selected" value="20">20</option>
+            <option value="25">25</option>
+            <option value="30">30</option>
+            <option value="35">35</option>
+            <option value="40">40</option>
+            <option value="45">45</option>
+            <option value="50">50</option>
+            <option value="all">all</option>
+        </select>
+        <b>order by:</b>
+        <select name="order_by" onchange="SCHOOLMAP.getSchools()">
+            <option value="">-</option>
+            <option value="primary" selected="selected">Key stage 2 results</option>
+            <option value="ks3">Key stage 3 results</option>
+            <option value="secondary">GCSE results</option>
+            <option value="post16">GCE and VCE results</option>
+        </select>
+    </div>
+</form>

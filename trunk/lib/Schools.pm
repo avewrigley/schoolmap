@@ -51,20 +51,53 @@ sub json
 sub types
 {
     my $self = shift;
+    print to_json( $self->_get_types );
+}
+
+sub _get_types
+{
+    my $self = shift;
     my ( $where, @args ) = $self->geo_where();
     my $sql = "SELECT COUNT(*) FROM ofsted,school,postcode $where";
     my $sth = $self->{dbh}->prepare( $sql );
     $sth->execute( @args );
     my ( $all ) = $sth->fetchrow;
-    my @types = ( { val => "", str => "all ($all)" } );
-    $sql = "SELECT type, COUNT(*) FROM ofsted,school,postcode $where GROUP BY type";
-    my $sth = $self->{dbh}->prepare( $sql );
+    my @types = ( { val => "all", str => "all ($all)" } );
+    $sql = "SELECT type, COUNT(*) AS c FROM ofsted,school,postcode $where GROUP BY type ORDER BY c DESC";
+    $sth = $self->{dbh}->prepare( $sql );
     $sth->execute( @args );
     while ( my ( $type, $count ) = $sth->fetchrow )
     {
         push( @types, { val => $type, str => "$type ($count)" } );
     }
-    print to_json( \@types );
+    return \@types;
+}
+
+sub get_school_types
+{
+    my $self = shift;
+    my @types = ( "all" );
+    my $sql = "SELECT DISTINCT type FROM ofsted";
+    my $sth = $self->{dbh}->prepare( $sql );
+    $sth->execute();
+    while ( my ( $type ) = $sth->fetchrow )
+    {
+        push( @types, $type );
+    }
+    return \@types;
+}
+
+sub get_order_bys
+{
+    my $self = shift;
+    return [
+        { val => "", str => "-" },
+        { val => "distance", str => "Distance" },
+        { val => "primary", str => "Key stage 2 results" },
+        { val => "ks3", str => "Key stage 3 results" },
+        { val => "secondary", str => "GCSE results" },
+        { val => "post16", str => "GCE and VCE results" },
+    ];
 }
 
 sub xml
@@ -187,7 +220,7 @@ EOF
         delete $school->{location};
         push( @schools, $school );
     }
-    my $sth = $self->{dbh}->prepare( "SELECT FOUND_ROWS();" );
+    $sth = $self->{dbh}->prepare( "SELECT FOUND_ROWS();" );
     $sth->execute();
     my ( $nschools ) = $sth->fetchrow();
     warn "NROWS: $nschools\n";

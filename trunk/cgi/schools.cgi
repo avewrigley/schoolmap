@@ -1,4 +1,4 @@
-#!/usr/bin/perl -T
+#!/usr/bin/perl
 # set filetype=perl
 
 #------------------------------------------------------------------------------
@@ -10,7 +10,8 @@
 use strict;
 use warnings;
 
-use lib "/var/www/www.schoolmap.org.uk/lib";
+use FindBin qw( $Bin );
+use lib "$Bin/../lib";
 require Schools;
 require CGI::Lite;
 
@@ -30,15 +31,16 @@ if ( exists $formdata{types} )
     # print "Content-Type: application/json\n\n";
     print "Content-Type: text/plain\n\n";
     Schools->new( %formdata )->types();
+    exit;
 }
-elsif ( $formdata{format} eq 'json' )
+my $mimetype = $mimetype{$formdata{format}};
+print "Content-Type: $mimetype\n\n";
+if ( $formdata{format} eq 'json' )
 {
-    print "Content-Type: application/json\n\n";
     Schools->new( %formdata )->json();
 }
 else
 {
-    print "Content-Type: text/xml\n\n";
     Schools->new( %formdata )->xml();
 }
 

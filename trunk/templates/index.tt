@@ -1,0 +1,46 @@
+[% WRAPPER wrapper.tt %]
+<form>
+    <ol>
+        <li>
+            [% IF address %]address[% ELSE %]first, type in your address or postcode[% END %]
+            <input size="40" name="address" value="[% address | html_entity %]" />
+            [% IF coordinates %]
+                <span class="coords">(lat: [% coordinates.0 %], lon: [% coordinates.1 %])</span>
+            [% END %]
+            [% IF address && ! coordinates %]
+                <span class="error">address not recognised</span>
+            [% END %]
+        </li>
+        [% IF address %]
+            <li>
+                [% IF type %]school type[% ELSE %]second, select a type of school[% END %]
+                <select name="type" onchange="SCHOOLMAP.typeOnchange( this )">
+                    [% FOREACH t IN types %]
+                        <option 
+                            value="[% t %]"
+                            [% IF t == type %]selected="selected"[% END %]
+                        >[% t | html_entity %]</option>
+                    [% END %]
+                </select>
+            </li>
+        [% END %]
+        [% IF type %]
+            <li>
+                [% IF order_by %]order by[% ELSE %]finally, select how you want to order the results[% END %]
+                <select name="order_by">
+                    [% FOREACH o IN order_bys %]
+                        <option 
+                            value="[% o.val %]"
+                            [% IF o.val == order_by %]selected="selected"[% END %]
+                        >[% o.str | html_entity %]</option>
+                    [% END %]
+                </select>
+            </li>
+        [% END %]
+    </ol>
+    <input type="submit" value="Go" />
+</form>
+[% IF coordinates %]
+    [% INCLUDE map.tt %]
+[% END %]
+[% END %]

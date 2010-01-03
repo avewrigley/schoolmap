@@ -1,0 +1,12 @@
+<table id="main">
+    <tr>
+        <td id="mapContainer">
+            <div id="map"></div>
+            <div id="linkto"></div>
+        </td>
+        <td id="list"></td>
+    </tr>
+</table>
+<script>
+    SCHOOLMAP.initMap();
+</script>

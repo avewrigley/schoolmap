@@ -11,10 +11,11 @@ use strict;
 use warnings;
 
 require CGI::Lite;
-use lib "/var/www/www.schoolmap.org.uk/lib";
+use FindBin qw( $Bin );
+use lib "$Bin/../lib";
 require School;
 
-open( STDERR, ">>/var/www/www.schoolmap.org.uk/logs/school.log" );
+open( STDERR, ">>$Bin/../logs/school.log" );
 warn "$$ at ", scalar( localtime ), "\n";
 my %formdata = CGI::Lite->new->parse_form_data();
 print "Content-Type: text/html\n\n";

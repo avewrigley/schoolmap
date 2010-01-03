@@ -1,0 +1,7 @@
+<form action="/" onsubmit="return false">
+    <fieldset>
+        <legend>Search</legend>
+        <input size="10" name="query" value="[% address | html_entity %]" />
+        <input type="submit" value="find address" onclick="SCHOOLMAP.findAddress( this.form.query.value ); return false" />
+    </fieldset>
+</form>
