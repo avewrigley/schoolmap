@@ -1,5 +1,5 @@
 [% WRAPPER wrapper.tt %]
-<form>
+<form method="get" action="index.cgi">
     <ol>
         <li>
             [% IF address %]address[% ELSE %]first, type in your address or postcode[% END %]
@@ -38,7 +38,7 @@
             </li>
         [% END %]
     </ol>
-    <input type="submit" value="Go" />
+    <p><input type="submit" value="Go" /></p>
 </form>
 [% IF coordinates %]
     [% INCLUDE map.tt %]

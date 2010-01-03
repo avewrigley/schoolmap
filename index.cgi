@@ -30,6 +30,7 @@ if ( $formdata{type} && ! $formdata{order_by} )
     $formdata{order_by} = "secondary" if $formdata{type} =~ /independent/i;
     $formdata{order_by} = "post16" if $formdata{type} =~ /further education/i;
 }
+$formdata{apikey} = $config->{apikey};
 if ( $formdata{address} )
 {
     my $geocoder = Geo::Coder::Google->new(
