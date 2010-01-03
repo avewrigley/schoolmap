@@ -1,0 +1,8 @@
+[% WRAPPER wrapper.tt %]
+<form>
+    <ol><li>First, type your address or postcode
+    <input size="10" name="address" value="[% address | html_entity %]" />
+    <input type="submit" value="Go" />
+    </li></ol>
+</form>
+[% END %]
