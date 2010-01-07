@@ -141,12 +141,14 @@ sub update_school
     if ( my $i = $types{$type}{score_index} )
     {
         $score = $row->[$i];
-        $score =~ s/\s*$//; $score =~ s/^\s*//;
-        warn "no score\n" unless $score;
-        unless ( $score =~ /^([\d\.]+)$/ )
+        if ( $score )
         {
-            warn "'$score' is not numeric\n";
-            $score = undef;
+            $score =~ s/\s*$//; $score =~ s/^\s*//;
+            unless ( $score =~ /^([\d\.]+)$/ )
+            {
+                # warn "'$score' is not numeric\n";
+                $score = undef;
+            }
         }
     }
     else
@@ -186,7 +188,7 @@ sub update_school
         $school{lat} = $lat, $school{lon} = $lon;
     }
     my @acronyms = $html =~ m{<a .*?class="acronym".*?>(.*?)</a>}gism;
-    warn "\t\t\t(lat:$lat, lon:$lon, score:$score, pupils:$pupils, acronyms:@acronyms)\n";
+    #warn "\t\t\t(lat:$lat, lon:$lon, score:$score, pupils:$pupils, acronyms:@acronyms)\n";
     my $dsth = $dbh->prepare( "DELETE FROM acronym WHERE dcsf_id = ?" );
     my $isth = $dbh->prepare( "INSERT INTO acronym ( dcsf_id, acronym, type ) VALUES ( ?,?,? )" );
     $dsth->execute( $school{dcsf_id} );
@@ -242,8 +244,6 @@ unless ( $opts{verbose} )
 {
     open( STDERR, ">$logfile" ) or die "can't write to $logfile\n";
 }
-my $te = HTML::TableExtract->new( keep_html => 1 );
-
 %types = get_types( $opts{year} );
 @types = $opts{type} ? ( $opts{type} ) : keys %types;
 for my $type ( @types )
@@ -264,6 +264,7 @@ for my $type ( @types )
         warn "failed to find link matching $type_regex!\n";
         next;
     }
+    warn $mech->uri(), "\n";
     my $success = 0;
     my @regions = $mech->find_all_links( url_regex => qr/\/region\d+/ );
     for my $region ( @regions )
@@ -298,9 +299,17 @@ for my $type ( @types )
                     next;
                 }
             }
+            my %url_seen = ();
             while ( 1 )
             {
+                my $url = $mech->uri;
+                if ( $url_seen{$url}++ )
+                {
+                    warn "$url already seen\n";
+                    last;
+                }
                 my $html = $mech->content();
+                my $te = HTML::TableExtract->new( keep_html => 1 );
                 $te->parse( $html );
                 my @tables = $te->tables;
                 foreach my $ts ( $te->tables ) {
@@ -314,7 +323,8 @@ for my $type ( @types )
                         my $u1 = URI::URL->new( $school_url, $url );
                         $school_url = $u1->abs;
                         next if $opts{school} && $opts{school} ne $school_name;
-                        warn "$type\t$region_name\t$la_name\t$school_name ($school_url)\n";
+                        # warn "$type\t$region_name\t$la_name\t$school_name ($school_url)\n";
+                        warn "\t$school_name ($school_url)\n";
                         eval {
                             update_school( $type, $school_name, $school_url, $row );
                         };
@@ -324,7 +334,7 @@ for my $type ( @types )
                         }
                     }
                 }
-                if ( $mech->follow_link( text_regex => qr/Next \d+ schools/ ) )
+                if ( $mech->follow_link( text_regex => qr/Next/ ) )
                 {
                     my $next_url = $mech->uri;
                     warn "Next page ($next_url) ...\n";

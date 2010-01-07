@@ -23,13 +23,6 @@ my $schools = Schools->new( %formdata );
 $formdata{types} = $schools->get_school_types;
 $formdata{order_bys} = $schools->get_order_bys;
 my $template_file = 'index.tt';
-if ( $formdata{type} && ! $formdata{order_by} )
-{
-    $formdata{order_by} = "primary" if $formdata{type} =~ /primary/i;
-    $formdata{order_by} = "secondary" if $formdata{type} =~ /secondary/i;
-    $formdata{order_by} = "secondary" if $formdata{type} =~ /independent/i;
-    $formdata{order_by} = "post16" if $formdata{type} =~ /further education/i;
-}
 $formdata{apikey} = $config->{apikey};
 if ( $formdata{address} )
 {
@@ -39,7 +32,6 @@ if ( $formdata{address} )
     );
     my $location = $geocoder->geocode( location => $formdata{address} );
     $formdata{location} = $location;
-    $formdata{coordinates} = $location->{Placemark}[0]{Point}{coordinates};
 }
 my $template = Template->new( INCLUDE_PATH => "$Bin/templates" );
 $template->process( $template_file, \%formdata )
