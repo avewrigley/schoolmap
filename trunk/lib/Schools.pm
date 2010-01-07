@@ -143,6 +143,10 @@ sub where
         push( @where, "ofsted.type = ?" );
         push( @args, $self->{type} );
     }
+    else
+    {
+        push( @where, "ofsted.type IS NOT NULL" );
+    }
     if ( $self->{find_school} )
     {
         push( @where, 'school.name LIKE ?' );

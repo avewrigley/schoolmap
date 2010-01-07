@@ -1,20 +1,23 @@
 [% WRAPPER wrapper.tt %]
 <form method="get" action="index.cgi">
+<table><tr>
+<td id="inputs">
+    <input type="hidden" name="zoom" id="zoom" value="">
+    <input type="hidden" name="centerLat" id="centerLat" value="">
+    <input type="hidden" name="centerLng" id="centerLng" value="">
     <ol>
         <li>
             [% IF address %]address[% ELSE %]first, type in your address or postcode[% END %]
-            <input size="40" name="address" value="[% address | html_entity %]" />
-            [% IF coordinates %]
-                <span class="coords">(lat: [% coordinates.0 %], lon: [% coordinates.1 %])</span>
-            [% END %]
-            [% IF address && ! coordinates %]
+            <input id="address" name="address" value="[% address | html_entity %]" />
+            <span id="coords"></span>
+            [% IF address && ! location %]
                 <span class="error">address not recognised</span>
             [% END %]
         </li>
         [% IF address %]
             <li>
                 [% IF type %]school type[% ELSE %]second, select a type of school[% END %]
-                <select name="type" onchange="SCHOOLMAP.typeOnchange( this )">
+                <select name="type">
                     [% FOREACH t IN types %]
                         <option 
                             value="[% t %]"
@@ -38,9 +41,12 @@
             </li>
         [% END %]
     </ol>
+    </td><td id="go">
     <p><input type="submit" value="Go" /></p>
+    </td>
+</tr></table>
 </form>
-[% IF coordinates %]
+[% IF location %]
     [% INCLUDE map.tt %]
 [% END %]
 [% END %]
