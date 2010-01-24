@@ -13,13 +13,17 @@ sub new
 {
     my $class = shift;
     my $self = bless { @_ }, $class;
-    warn Dumper $self;
     require DBI;
     # $self->{debug} = 1;
     $self->{dbh} = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
     $self->{tt} = Template->new( { INCLUDE_PATH => "/var/www/www.schoolmap.org.uk/templates" } );
     return $self;
 }
+
+my %ofsted_type2dcsf_type = (
+    "Secondary school" => "secondary",
+    "Primary school" => "primary",
+);
 
 my %label = (
     secondary => "Secondary",
@@ -62,13 +66,15 @@ sub _get_types
     my $sth = $self->{dbh}->prepare( $sql );
     $sth->execute( @args );
     my ( $all ) = $sth->fetchrow;
-    my @types = ( { val => "all", str => "all ($all)" } );
+    # my @types = ( { val => "all", str => "all ($all)" } );
+    my @types = ( { val => "all", str => "all" } );
     $sql = "SELECT type, COUNT(*) AS c FROM ofsted,school,postcode $where GROUP BY type ORDER BY c DESC";
     $sth = $self->{dbh}->prepare( $sql );
     $sth->execute( @args );
     while ( my ( $type, $count ) = $sth->fetchrow )
     {
-        push( @types, { val => $type, str => "$type ($count)" } );
+        # push( @types, { val => $type, str => "$type ($count)" } );
+        push( @types, { val => $type, str => $type } );
     }
     return \@types;
 }
@@ -138,10 +144,18 @@ sub where
         push( @where, "dcsf.min_age <= ? AND dcsf.max_age >= ?" );
         push( @args, $self->{age}, $self->{age} );
     }
-    if ( $self->{type} )
+    if ( my $ofsted_type = $self->{type} )
     {
-        push( @where, "ofsted.type = ?" );
-        push( @args, $self->{type} );
+        if ( my $dcsf_type = $ofsted_type2dcsf_type{$ofsted_type} )
+        {
+            push( @where, "( ofsted.type = ? OR dcsf.type = ? )" );
+            push( @args, $ofsted_type, $dcsf_type );
+        }
+        else
+        {
+            push( @where, "ofsted.type = ?" );
+            push( @args, $ofsted_type );
+        }
     }
     else
     {

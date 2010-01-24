@@ -4,6 +4,7 @@
         [% INCLUDE "header.tt" %]
     </head>
     <body>
+        [% INCLUDE "google_analytics.tt" %]
         <div id="header"><h1>UK School Finder</h1></div>
         <div id="content">[% content %]</div>
         <div id="footer">[% INCLUDE "footer.tt" %]</div>
