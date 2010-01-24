@@ -1,6 +1,7 @@
 <table width="100%">
     <tr>
-        <td align="left">comments / suggestions / bugs to <a href="mailto:ave.wrigley@ave.wrigley.name">ave.wrigley@ave.wrigley.name</a></td>
+        <td align="left">comments / suggestions / bugs to <a href="mailto:ave.wrigley@ave.wrigley.name">ave.wrigley@ave.wrigley.name</a><br />
+        <a href="wordpress/?page_id=5">FAQ</a></td>
         <td align="center">
             [% INCLUDE "links.tt" %]
         </td>
@@ -17,4 +18,3 @@
         </td>
     </tr>
 </table>
-[% INCLUDE "google_analytics.tt" %]

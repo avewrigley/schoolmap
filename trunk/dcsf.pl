@@ -38,14 +38,6 @@ sub get_types
             score_index => 16,
             details_regex => qr{<dt>Address:</dt>.*?<dd>(.*?)</dd>}sim,
         },
-        # ks3 => {
-        # type_regex => qr/$year Secondary School \(Key Stage 3\)/,
-        # la_regex => qr/Mode=Z&Type=LA&.*?No=\d+&.*?&Phase=k/,
-        # school_regex => qr/Mode=Z&Type=LA.*?&Phase=k&Year=\d+&Base=a&Num=\d+/,
-        # pupils_index => 1,
-        # score_index => 15,
-        # details_regex => qr{<dt>Address:</dt>.*?<dd>(.*?)</dd>}sim,
-        # },
         secondary => {
             type_regex => qr/$year Secondary School \(GCSE and equivalent\)/,
             la_regex => qr/Mode=Z&Type=LA&.*?No=\d+&.*?&Phase=1/,
@@ -209,18 +201,18 @@ sub update_school
     if ( $select_sth->fetchrow )
     {
         my $update_sql = <<EOF;
-UPDATE dcsf SET ${type}_url = ?, average_${type} = ?, pupils_${type} = ? WHERE dcsf_id = ?
+UPDATE dcsf SET type = ?, ${type}_url = ?, average_${type} = ?, pupils_${type} = ? WHERE dcsf_id = ?
 EOF
         my $update_sth = $dbh->prepare( $update_sql );
-        $update_sth->execute( $url, $score, $pupils, $school{dcsf_id} );
+        $update_sth->execute( $type, $url, $score, $pupils, $school{dcsf_id} );
     }
     else
     {
         my $insert_sql = <<EOF;
-INSERT INTO dcsf (special,min_age,max_age,age_range,${type}_url,average_${type},pupils_${type},dcsf_id) VALUES(?,?,?,?,?,?,?,?)
+INSERT INTO dcsf (type,special,min_age,max_age,age_range,${type}_url,average_${type},pupils_${type},dcsf_id) VALUES(?,?,?,?,?,?,?,?)
 EOF
         my $insert_sth = $dbh->prepare( $insert_sql );
-        $insert_sth->execute( $special, $min_age, $max_age, $age_range, $url, $score, $pupils, $school{dcsf_id} );
+        $insert_sth->execute( $type, $special, $min_age, $max_age, $age_range, $url, $score, $pupils, $school{dcsf_id} );
     }
     $done{$school{dcsf_id}} = $school_name;
 }

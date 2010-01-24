@@ -60,30 +60,46 @@ a:hover {
     float: left;
 }
 
-table#main td.half {
-    width: 50%;
-    padding: 5px;
-    vertical-align: top;
-}
-
 table {
     width: 100%;
 }
 
+td {
+    vertical-align: top;
+}
+
 td#go {
-    vertical-align: bottom;
     text-align: right;
+    vertical-align: bottom;
+    padding-bottom: 25px;
 }
 
 td#inputs {
     width: 100%;
     text-align: left;
-    vertical-align: top;
+}
+
+table#main td.half {
+    width: 50%;
+    padding: 5px;
 }
 
 #coords { 
+    display: none;
     font-size: 16px;
     font-weight: bold;
+}
+
+div#layers {
+    position: relative;
+    top: -50px;
+    left: 40%;
+    width: 200px;
+    font-size: 10px;
+}
+
+#layers * { 
+    font-size: 10px;
 }
 
 #linkto { 

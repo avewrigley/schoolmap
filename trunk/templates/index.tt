@@ -1,7 +1,7 @@
 [% WRAPPER wrapper.tt %]
-<form method="get" action="index.cgi">
 <table><tr>
-<td id="inputs">
+<form method="get" action="index.cgi">
+    <td id="options">
     <input type="hidden" name="zoom" id="zoom" value="">
     <input type="hidden" name="centerLat" id="centerLat" value="">
     <input type="hidden" name="centerLng" id="centerLng" value="">
@@ -9,7 +9,6 @@
         <li>
             [% IF address %]address[% ELSE %]first, type in your address or postcode[% END %]
             <input id="address" name="address" value="[% address | html_entity %]" />
-            <span id="coords"></span>
             [% IF address && ! location %]
                 <span class="error">address not recognised</span>
             [% END %]
@@ -17,6 +16,7 @@
         [% IF address %]
             <li>
                 [% IF type %]school type[% ELSE %]second, select a type of school[% END %]
+                <!-- <select name="type" onchange="SCHOOLMAP.typeOnChange()"> -->
                 <select name="type">
                     [% FOREACH t IN types %]
                         <option 
@@ -30,6 +30,7 @@
         [% IF type %]
             <li>
                 [% IF order_by %]order by[% ELSE %]finally, select how you want to order the results[% END %]
+                <!-- <select name="order_by" onchange="SCHOOLMAP.orderByOnChange()"> -->
                 <select name="order_by">
                     [% FOREACH o IN order_bys %]
                         <option 
@@ -41,8 +42,9 @@
             </li>
         [% END %]
     </ol>
-    </td><td id="go">
-    <p><input type="submit" value="Go" /></p>
+    </td>
+    <td id="go">
+        <input type="submit" value="Go" />
     </td>
 </tr></table>
 </form>
