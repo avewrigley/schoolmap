@@ -701,7 +701,7 @@ SCHOOLMAP.initTableHead = function( tr, result_types )
     var ths = new Array();
     SCHOOLMAP.createHeadCell( tr, "no" );
     SCHOOLMAP.createHeadCell( tr, "name", "Name of school", 1 );
-    SCHOOLMAP.createHeadCell( tr, "stage", "School stage" );
+    // SCHOOLMAP.createHeadCell( tr, "stage", "School stage" );
     SCHOOLMAP.createHeadCell( tr, "type", "Type of school" );
     SCHOOLMAP.createHeadCell( tr, "ofsted report", "Link to Ofsted report" );
     for ( var i = 0; i < result_types.length; i++ )
@@ -739,7 +739,8 @@ SCHOOLMAP.ignoreConsoleErrors = function() {
     }
 }
 
-SCHOOLMAP.toggleLayer = function( i ) {
+SCHOOLMAP.toggleLayer = function( i ) 
+{
     if ( i.checked ) SCHOOLMAP.layers[i.name].show();
     else SCHOOLMAP.layers[i.name].hide();
 }
@@ -919,7 +920,7 @@ SCHOOLMAP.createListRow = function( no, school, result_types )
     }
     tr.appendChild( SCHOOLMAP.createListTd( { "text":no+1, "url":url, "school":school } ) );
     tr.appendChild( SCHOOLMAP.createListTd( { "text":school.name, "url":url, "school":school } ) );
-    tr.appendChild( SCHOOLMAP.createListTd( { "text":school.type, "url":url, "school":school } ) );
+    // tr.appendChild( SCHOOLMAP.createListTd( { "text":school.type, "url":url, "school":school } ) );
     tr.appendChild( SCHOOLMAP.createListTd( { "text":school.TYPE_OF_ESTAB, "url":url, "school":school } ) );
     if ( school.ofsted_url ) 
     {
