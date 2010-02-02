@@ -26,11 +26,10 @@ open( STDERR, ">>/var/www/www.schoolmap.org.uk/logs/schools.log" );
 warn "$$ at ", scalar( localtime ), "\n";
 my %formdata = ( format => "json", CGI::Lite->new->parse_form_data() );
 warn map "$_ = $formdata{$_}\n", keys %formdata;
-if ( exists $formdata{types} )
+if ( exists $formdata{phases} )
 {
-    # print "Content-Type: application/json\n\n";
-    print "Content-Type: text/plain\n\n";
-    Schools->new( %formdata )->types();
+    print "Content-Type: application/json\n\n";
+    Schools->new( %formdata )->phases();
     exit;
 }
 my $mimetype = $mimetype{$formdata{format}};

@@ -20,21 +20,6 @@ sub new
     return $self;
 }
 
-my %ofsted_type2dcsf_type = (
-    "Secondary school" => "secondary",
-    "Primary school" => "primary",
-);
-
-my %label = (
-    secondary => "Secondary",
-    post16 => "Sixteen Plus",
-    primary => "Primary",
-    independent => "Independent",
-    nursery => "Nursery",
-    sen => "Special School",
-    pru => "Pupil Referral Unit",
-);
-
 sub process_template
 {
     my $self = shift;
@@ -52,45 +37,26 @@ sub json
     print to_json( $schools );
 }
 
-sub types
+sub phases
 {
     my $self = shift;
-    print to_json( $self->_get_types );
+    print to_json( $self->get_phases );
 }
 
-sub _get_types
+sub get_phases
 {
     my $self = shift;
-    my ( $where, @args ) = $self->geo_where();
-    my $sql = "SELECT COUNT(*) FROM ofsted,school,postcode $where";
+    my ( $where, $from, @args ) = $self->geo_where();
+    my @phases = ( "all" );
+    my $sql = "SELECT DISTINCT phase FROM $from $where";
+    warn "$sql\n";
     my $sth = $self->{dbh}->prepare( $sql );
     $sth->execute( @args );
-    my ( $all ) = $sth->fetchrow;
-    # my @types = ( { val => "all", str => "all ($all)" } );
-    my @types = ( { val => "all", str => "all" } );
-    $sql = "SELECT type, COUNT(*) AS c FROM ofsted,school,postcode $where GROUP BY type ORDER BY c DESC";
-    $sth = $self->{dbh}->prepare( $sql );
-    $sth->execute( @args );
-    while ( my ( $type, $count ) = $sth->fetchrow )
+    while ( my ( $phase ) = $sth->fetchrow )
     {
-        # push( @types, { val => $type, str => "$type ($count)" } );
-        push( @types, { val => $type, str => $type } );
+        push( @phases, $phase );
     }
-    return \@types;
-}
-
-sub get_school_types
-{
-    my $self = shift;
-    my @types = ( "all" );
-    my $sql = "SELECT DISTINCT type FROM ofsted";
-    my $sth = $self->{dbh}->prepare( $sql );
-    $sth->execute();
-    while ( my ( $type ) = $sth->fetchrow )
-    {
-        push( @types, $type );
-    }
-    return \@types;
+    return \@phases;
 }
 
 sub get_order_bys
@@ -134,32 +100,14 @@ sub where
         );
         push( @args, $self->{minLon}, $self->{maxLon}, $self->{minLat}, $self->{maxLat} );
     }
-    if ( $self->{special} )
+    if ( my $school_phase = $self->{phase} )
     {
-        push( @where, "dcsf.special = ?" );
-        push( @args, $self->{special} );
-    }
-    if ( exists $self->{age} )
-    {
-        push( @where, "dcsf.min_age <= ? AND dcsf.max_age >= ?" );
-        push( @args, $self->{age}, $self->{age} );
-    }
-    if ( my $ofsted_type = $self->{type} )
-    {
-        if ( my $dcsf_type = $ofsted_type2dcsf_type{$ofsted_type} )
-        {
-            push( @where, "( ofsted.type = ? OR dcsf.type = ? )" );
-            push( @args, $ofsted_type, $dcsf_type );
-        }
-        else
-        {
-            push( @where, "ofsted.type = ?" );
-            push( @args, $ofsted_type );
-        }
+        push( @where, "school.phase = ?" );
+        push( @args, $school_phase );
     }
     else
     {
-        push( @where, "ofsted.type IS NOT NULL" );
+        push( @where, "school.phase IS NOT NULL" );
     }
     if ( $self->{find_school} )
     {
@@ -173,39 +121,28 @@ sub where
 sub geo_where
 {
     my $self = shift;
-    my @args;
-    my @where = ( 
+    return ( "", "school" ) unless $self->{minLon} && $self->{maxLon} && $self->{minLat} && $self->{maxLat};
+    my @where = (
         "school.postcode = postcode.code", 
-        "school.ofsted_id = ofsted.ofsted_id",
+        "postcode.lon > ?",
+        "postcode.lon < ?",
+        "postcode.lat > ?",
+        "postcode.lat < ?",
     );
-    if ( $self->{minLon} && $self->{maxLon} && $self->{minLat} && $self->{maxLat} )
-    {
-        push( 
-            @where,
-            (
-                "postcode.lon > ?",
-                "postcode.lon < ?",
-                "postcode.lat > ?",
-                "postcode.lat < ?",
-            )
-        );
-        push( @args, $self->{minLon}, $self->{maxLon}, $self->{minLat}, $self->{maxLat} );
-    }
-    my $where = @where ? "WHERE " . join( " AND ", @where ) : '';
-    return ( $where, @args );
+    my @args = ( $self->{minLon}, $self->{maxLon}, $self->{minLat}, $self->{maxLat} );
+    my $where = "WHERE " . join( " AND ", @where );
+    return ( $where, "school,postcode", @args );
 }
 
 sub get_schools
 {
     my $self = shift;
-    my @what = ( "*" );
+    my @what = ( "postcode.*,school.*,dcsf.*" );
     my $what = join( ",", @what );
     my ( $where, @args ) = $self->where;
     my @from = ( "postcode", "school" );
-    # my %join = ( "dcsf" => "dcsf_id", "ofsted" => "ofsted_id" ); # , "school_list" => "ofsted_id" );
     my %join = ( 
-        "school_list" => "ON school.ofsted_id = school_list.URN",
-        "ofsted" => "ON school.ofsted_id = ofsted.ofsted_id",
+        "edubase" => "ON school.ofsted_id = edubase.URN",
         "dcsf" => "ON school.dcsf_id = dcsf.dcsf_id",
     );
     my $from = join( ",", @from );
@@ -222,7 +159,7 @@ EOF
     {
         $sql .= " ORDER BY name";
     }
-    unless ( $self->{limit} eq 'all' || $self->{nolimit} )
+    unless ( $self->{nolimit} )
     {
         my $limit = 50;
         $limit = $self->{limit} if defined $self->{limit};

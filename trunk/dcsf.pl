@@ -20,8 +20,8 @@ use HTML::Entities;
 require HTML::TableExtract;
 use DBI;
 use lib "$Bin/lib";
-require CreateSchool;
 use Acronyms;
+use Data::Dumper;
 use vars qw( %types @types );
 
 my $postcode_regex = qr{^([A-PR-UWYZ0-9][A-HK-Y0-9][AEHMNPRTVXY0-9]?[ABEHMNPRVWXY0-9]? {1,2}[0-9][ABD-HJLN-UW-Z]{2}|GIR 0AA)$}i;
@@ -37,6 +37,7 @@ sub get_types
             pupils_index => 1,
             score_index => 16,
             details_regex => qr{<dt>Address:</dt>.*?<dd>(.*?)</dd>}sim,
+            phase => "Primary",
         },
         secondary => {
             type_regex => qr/$year Secondary School \(GCSE and equivalent\)/,
@@ -46,14 +47,16 @@ sub get_types
             score_index => 10,
             table_tab => "KS4 Results",
             details_regex => qr{<dt>Address:</dt>.*?<dd>(.*?)</dd>}sim,
+            phase => "Secondary",
         },
         post16 => {
-            type_regex => qr/$year School and College \(post-16\)/,
+            type_regex => qr/$year School and College/,
             la_regex => qr/Mode=Z&Type=LA&No=\d+&.*&Phase=2/,
             school_regex => qr/Mode=Z&Type=LA&Phase=2&Year=\d+&Base=a&Num=\d+/,
             pupils_index => 1,
             details_regex => qr{<dt>Address:</dt>.*?<dd>(.*?)</dd>}sim,
             score_index => 3,
+            phase => "16 Plus",
         },
     );
 }
@@ -97,11 +100,15 @@ sub update_school
     my @address;
     for my $line ( @lines )
     {
-        push( @address, $line );
         if ( $line =~ $postcode_regex )
         {
             $school{postcode} = $line;
+            $school{postcode} =~ s/\s//g;
             last;
+        }
+        else
+        {
+            push( @address, $line );
         }
     }
     $school{address} = join( ",", @address );
@@ -128,7 +135,26 @@ sub update_school
         warn "All combined schools found\n";
         return;
     }
-    $sc->create_school( 'dcsf', %school );
+    my $school_select_sql = "SELECT * FROM school WHERE name = ? AND postcode = ?";
+    my $school_select_sth = $dbh->prepare( $school_select_sql );
+    warn "$school{name} : $school{postcode}\n";
+    $school_select_sth->execute( $school{name}, $school{postcode} );
+    my $school_row = $school_select_sth->fetchrow_hashref;
+    unless ( $school_row )
+    {
+        warn "can't find $school{name} : $school{postcode} in school table\n";
+        $school{phase} = $types{$type}{phase};
+        my $school_insert_sql = "INSERT INTO school ( name, postcode, address, dcsf_id, phase ) VALUE ( ?, ?, ?, ?, ? )";
+        my $school_insert_sth = $dbh->prepare( $school_insert_sql );
+        $school_insert_sth->execute( @school{ qw( name postcode address dcsf_id phase ) } );
+    }
+    unless ( $school_row->{dcsf_id} )
+    {
+        my $school_update_sql = "UPDATE school SET dcsf_id = ? WHERE name = ? AND postcode = ?";
+        my $school_update_sth = $dbh->prepare( $school_update_sql );
+        $school_update_sth->execute( @school{ qw( dcsf_id name postcode ) } );
+    }
+    # $sc->create_school( 'dcsf', %school );
     my ( $score, $pupils );
     if ( my $i = $types{$type}{score_index} )
     {
@@ -181,13 +207,6 @@ sub update_school
     }
     my @acronyms = $html =~ m{<a .*?class="acronym".*?>(.*?)</a>}gism;
     #warn "\t\t\t(lat:$lat, lon:$lon, score:$score, pupils:$pupils, acronyms:@acronyms)\n";
-    my $dsth = $dbh->prepare( "DELETE FROM acronym WHERE dcsf_id = ?" );
-    my $isth = $dbh->prepare( "INSERT INTO acronym ( dcsf_id, acronym, type ) VALUES ( ?,?,? )" );
-    $dsth->execute( $school{dcsf_id} );
-    for my $acronym ( @acronyms )
-    {
-        $isth->execute( $school{dcsf_id}, $acronym, $type );
-    }
     my ( $age_range ) = grep /\d+-\d+/, @acronyms;
     my ( $min_age, $max_age );
     if ( $age_range )
@@ -201,7 +220,7 @@ sub update_school
     if ( $select_sth->fetchrow )
     {
         my $update_sql = <<EOF;
-UPDATE dcsf SET type = ?, ${type}_url = ?, average_${type} = ?, pupils_${type} = ? WHERE dcsf_id = ?
+UPDATE dcsf SET dcsf_type = ?, ${type}_url = ?, average_${type} = ?, pupils_${type} = ? WHERE dcsf_id = ?
 EOF
         my $update_sth = $dbh->prepare( $update_sql );
         $update_sth->execute( $type, $url, $score, $pupils, $school{dcsf_id} );
@@ -209,7 +228,17 @@ EOF
     else
     {
         my $insert_sql = <<EOF;
-INSERT INTO dcsf (type,special,min_age,max_age,age_range,${type}_url,average_${type},pupils_${type},dcsf_id) VALUES(?,?,?,?,?,?,?,?)
+INSERT INTO dcsf (
+    dcsf_type,
+    special,
+    min_age,
+    max_age,
+    age_range,
+    ${type}_url,
+    average_${type},
+    pupils_${type},
+    dcsf_id
+) VALUES(?,?,?,?,?,?,?,?,?)
 EOF
         my $insert_sth = $dbh->prepare( $insert_sql );
         $insert_sth->execute( $type, $special, $min_age, $max_age, $age_range, $url, $score, $pupils, $school{dcsf_id} );
@@ -220,8 +249,7 @@ EOF
 # Main
 
 $opts{pidfile} = 1;
-$opts{year} = ( localtime )[5];
-$opts{year} += 1900;
+$opts{year} = 2009;
 GetOptions( \%opts, @opts ) or pod2usage( verbose => 0 );
 my $pp;
 if ( $opts{pidfile} )
@@ -230,7 +258,6 @@ if ( $opts{pidfile} )
 }
 my $logfile = "$Bin/logs/dcsf.log";
 $dbh = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
-$sc = CreateSchool->new( dbh => $dbh );
 $acronyms = Acronyms->new();
 unless ( $opts{verbose} )
 {
@@ -244,6 +271,7 @@ for my $type ( @types )
     warn "getting performance tables for $type\n";
     my $mech = WWW::Mechanize->new();
     $mech->get( 'http://www.dcsf.gov.uk/' );
+    warn "follow 'performance tables' link\n";
     unless ( $mech->follow_link( text_regex => qr/performance tables/i ) )
     {
         die "failed to find performance tables\n";
@@ -326,7 +354,14 @@ for my $type ( @types )
                         }
                     }
                 }
-                if ( $mech->follow_link( text_regex => qr/Next/ ) )
+                warn "follow Next link\n";
+                my $status = eval { $mech->follow_link( text_regex => qr/Next/ ) };
+                if ( $@ )
+                {
+                    warn "follow_link failed: $@\n";
+                    last;
+                }
+                if ( $status )
                 {
                     my $next_url = $mech->uri;
                     warn "Next page ($next_url) ...\n";

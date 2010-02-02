@@ -20,7 +20,8 @@ my %formdata = CGI::Lite->new->parse_form_data();
 warn Dumper \%formdata;
 print "Content-Type: text/html\n\n";
 my $schools = Schools->new( %formdata );
-$formdata{types} = $schools->get_school_types;
+warn "get school phases\n";
+$formdata{phases} = $schools->get_phases;
 $formdata{order_bys} = $schools->get_order_bys;
 my $template_file = 'index.tt';
 $formdata{apikey} = $config->{apikey};
@@ -30,7 +31,9 @@ if ( $formdata{address} )
         apikey => $config->{apikey},
         host => "maps.google.co.uk",
     );
+    warn "lookup $formdata{address}\n";
     my $location = $geocoder->geocode( location => $formdata{address} );
+    warn Dumper $location;
     $formdata{location} = $location;
 }
 my $template = Template->new( INCLUDE_PATH => "$Bin/templates" );
