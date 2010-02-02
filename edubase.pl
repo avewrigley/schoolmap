@@ -35,8 +35,7 @@ my $mech = WWW::Mechanize->new();
 my $dbh = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
 my $edubase_sth = $dbh->prepare( "SELECT PhaseOfEducation,TypeOfEstablishment,Street,Locality,Town,LLSC,EstablishmentName,URN,Postcode,Easting,Northing FROM edubase" );
 $edubase_sth->execute();
-my $school_sth = $dbh->prepare( "REPLACE INTO school (name, postcode, address, type, phase, ofsted_url, ofsted_id) VALUES (?,?,?,?,?,?,?)" );
-my $postcode_sth = $dbh->prepare( "REPLACE INTO postcode (lat, lon, code) VALUES (?,?,?)" );
+my $school_sth = $dbh->prepare( "REPLACE INTO school (name, postcode, lat, lon, address, type, phase, ofsted_url, ofsted_id) VALUES (?,?,?,?,?,?,?,?,?)" );
 while ( my $edubase = $edubase_sth->fetchrow_hashref )
 {
     $edubase->{Postcode} =~ s/\s//g;
@@ -61,11 +60,12 @@ while ( my $edubase = $edubase_sth->fetchrow_hashref )
     $school_sth->execute( 
         $edubase->{EstablishmentName},
         $edubase->{Postcode},
+        $lat,
+        $lon,
         $address,
         $edubase->{TypeOfEstablishment},
         $edubase->{PhaseOfEducation},
         $ofsted_url,
         $edubase->{URN},
     );
-    $postcode_sth->execute( $lat, $lon, $edubase->{Postcode} );
 }
