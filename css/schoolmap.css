@@ -90,6 +90,11 @@ table#main td.half {
     font-weight: bold;
 }
 
+#directions {
+    display: none;
+    width: 0; height; 0;
+}
+
 div#layers {
     position: relative;
     top: -50px;

@@ -7,7 +7,7 @@ var SCHOOLMAP = {
     params:{},
     nschools:0,
     place:false,
-    result_types:{ 
+    order_bys:{ 
         "primary":"Key stage 2",
         "ks3":"Key stage 3",
         "secondary":"GCSE",
@@ -15,16 +15,12 @@ var SCHOOLMAP = {
     },
     request:false,
     curtags:[ "body", "a", "input", "select", "div" ],
-    types:{
-        "unknown":{ colour: "ff00ff", active_colour:"ffaaff" },
-        "Secondary school":{ colour: "ff0000", active_colour:"ffaaaa" },
-        "Independent school":{ colour: "00ff00", active_colour:"aaffaa" },
-        "Independent special college":{ colour: "00ff00", active_colour:"aaffaa" },
-        "Independent special school":{ colour: "00ff00", active_colour:"aaffaa" },
-        "Higher education instituition":{ colour: "0000ff", active_colour:"aaaaff" },
-        "Further education college":{ colour: "0000ff", active_colour:"aaaaff" },
-        "Community special school":{ colour: "ff00ff", active_colour:"ffaaff" },
-        "Primary school":{ colour: "00ffff", active_colour:"aaffff" }
+    phases:{
+        "Not applicable":{ colour: "ff00ff", active_colour:"ffaaff" },
+        "Nursery":{ colour: "00ff00", active_colour:"aaffff" },
+        "Primary":{ colour: "00ffff", active_colour:"aaffff" },
+        "Secondary":{ colour: "ff0000", active_colour:"ffaaaa" },
+        "16 Plus":{ colour: "0000ff", active_colour:"aaaaff" }
     },
     handle_zoom:false,
     handle_move:false,
@@ -256,12 +252,12 @@ SCHOOLMAP.getQueryString = function()
         if ( order_by_val == "distance" ) order_by_val = "";
         query_string = query_string + "&order_by=" + escape( order_by_val );
     }
-    var type = document.forms[0].type;
-    if ( type ) 
+    var phase = document.forms[0].phase;
+    if ( phase ) 
     {
-        var type_val = type.value;
-        if ( type_val == "all" ) type_val = "";
-        query_string = query_string + "&type=" + escape( type_val );
+        var phase_val = phase.value;
+        if ( phase_val == "all" ) phase_val = "";
+        query_string = query_string + "&phase=" + escape( phase_val );
     }
     return query_string;
 };
@@ -270,23 +266,23 @@ SCHOOLMAP.getSchools = function()
 {
     var order_by = document.forms[0].order_by;
     if ( ! order_by ) return;
-    var type = document.forms[0].type;
-    if ( ! type ) return;
+    var phase = document.forms[0].phase;
+    if ( ! phase ) return;
     var query_string = SCHOOLMAP.getQueryString();
     var url = SCHOOLMAP.schools_url + "?" + query_string;
     SCHOOLMAP.createLinkTo( query_string );
     SCHOOLMAP.getJSON( url, SCHOOLMAP.getSchoolsCallback );
 };
 
-SCHOOLMAP.typesCallback = function( response ) 
+SCHOOLMAP.phasesCallback = function( response ) 
 {
-    var types = JSON.parse( response.responseText );
-    var sel = document.forms[0].type;
+    var phases = JSON.parse( response.responseText );
+    var sel = document.forms[0].phase;
     var val = sel.value;
     SCHOOLMAP.removeChildren( sel );
-    for ( var i = 0; i < types.length; i++ )
+    for ( var i = 0; i < phases.length; i++ )
     {
-        SCHOOLMAP.addOpt( sel, types[i] );
+        SCHOOLMAP.addOpt( sel, { str:phases[i], val:phases[i] } );
     }
     sel.value = val;
 };
@@ -346,14 +342,14 @@ SCHOOLMAP.redrawSchools = function( callback )
         {
             var school = SCHOOLMAP.schools[i];
             school.no = i+1;
-            if ( ! school.type ) school.type = "unknown";
-            var type = SCHOOLMAP.types[school.type];
-            if ( ! type )
+            if ( ! school.phase ) school.phase = "unknown";
+            var phase = SCHOOLMAP.phases[school.phase];
+            if ( ! phase )
             {
-                console.error( "no type for " + school.name + "(" + school.type + ")" );
+                console.error( "no phase for " + school.name + "(" + school.phase + ")" );
                 continue;
             }
-            var colour = type.colour;
+            var colour = phase.colour;
             var icon = SCHOOLMAP.createIcon( colour, school.no );
             if ( school.marker )
             {
@@ -379,7 +375,7 @@ SCHOOLMAP.orderByOnChange = function()
     SCHOOLMAP.getSchools();
 };
 
-SCHOOLMAP.typeOnChange = function()
+SCHOOLMAP.phaseOnChange = function()
 {
     SCHOOLMAP.getSchools();
 };
@@ -396,13 +392,13 @@ SCHOOLMAP.updateList = function( callback )
 SCHOOLMAP.activateSchool = function( school )
 {
     SCHOOLMAP.changeLinksColour( school, "ff4444" );
-    var type = SCHOOLMAP.types[school.type];
-    if ( ! type )
+    var phase = SCHOOLMAP.phases[school.phase];
+    if ( ! phase )
     {
-        console.error( "no type for " + school.name );
+        console.error( "no phase for " + school.name );
         return;
     }
-    SCHOOLMAP.changeMarkerColour( school, type.active_colour )
+    SCHOOLMAP.changeMarkerColour( school, phase.active_colour )
     if ( SCHOOLMAP.active_school ) SCHOOLMAP.deActivateSchool( SCHOOLMAP.active_school );
     if ( 0 && ! SCHOOLMAP.calculatingDistances )
     {
@@ -414,7 +410,7 @@ SCHOOLMAP.activateSchool = function( school )
         );
         SCHOOLMAP.gdir.load( 
             school.directions_text,
-            { preserveViewport:true, travelMode:"walking" }
+            { preserveViewport:true, travelMode: G_TRAVEL_MODE_WALKING }
         );
     }
     SCHOOLMAP.active_school = school;
@@ -425,13 +421,13 @@ SCHOOLMAP.deActivateSchool = function( school )
 {
     if ( ! school ) return;
     SCHOOLMAP.changeLinksColour( school, "4444ff" );
-    var type = SCHOOLMAP.types[school.type];
-    if ( ! type )
+    var phase = SCHOOLMAP.phases[school.phase];
+    if ( ! phase )
     {
-        console.error( "no type for " + school.name );
+        console.error( "no phase for " + school.name );
         return;
     }
-    SCHOOLMAP.changeMarkerColour( school, type.colour );
+    SCHOOLMAP.changeMarkerColour( school, phase.colour );
     if ( ! SCHOOLMAP.calculatingDistances ) SCHOOLMAP.gdir.clear();
     SCHOOLMAP.active_school = false;
 }
@@ -583,9 +579,11 @@ SCHOOLMAP.calculateDistance = function( school, callback )
     var to = point.lat() + "," + point.lng();
     // var to = SCHOOLMAP.place.address;
     school.directions_text = "from " + from + " to " + to;
+    console.log( school.name + " calculate distance: " + school.directions_text );
     try {
         SCHOOLMAP.setDistanceListeners( 
             function( meters ) {
+                console.log( school.name + " distance = " + meters );
                 school.meters = meters;
                 if ( school.distance_td ) 
                 {
@@ -596,9 +594,9 @@ SCHOOLMAP.calculateDistance = function( school, callback )
             },
             callback 
         );
-        SCHOOLMAP.gdir.load( 
+        SCHOOLMAP.gdir.load(
             school.directions_text,
-            { preserveViewport:true, travelMode:"walking" }
+            { preserveViewport:true, travelMode: G_TRAVEL_MODE_WALKING }
         );
     } catch( e ) {
         console.error( e.message );
@@ -696,23 +694,24 @@ SCHOOLMAP.createMarker = function( school, icon ) {
     catch(e) { console.error( e.message ) }
 }
 
-SCHOOLMAP.initTableHead = function( tr, result_types ) 
+SCHOOLMAP.initTableHead = function( tr, order_bys ) 
 {
     var ths = new Array();
-    SCHOOLMAP.createHeadCell( tr, "no" );
-    SCHOOLMAP.createHeadCell( tr, "name", "Name of school", 1 );
+    SCHOOLMAP.createHeadCell( tr, "No." );
+    SCHOOLMAP.createHeadCell( tr, "Name", "Name of school", 1 );
     // SCHOOLMAP.createHeadCell( tr, "stage", "School stage" );
-    SCHOOLMAP.createHeadCell( tr, "type", "Type of school" );
-    SCHOOLMAP.createHeadCell( tr, "ofsted report", "Link to Ofsted report" );
-    for ( var i = 0; i < result_types.length; i++ )
+    SCHOOLMAP.createHeadCell( tr, "Phase", "Educational phase" );
+    SCHOOLMAP.createHeadCell( tr, "Type", "Type of school" );
+    SCHOOLMAP.createHeadCell( tr, "Ofsted Report", "Link to Ofsted report" );
+    for ( var i = 0; i < order_bys.length; i++ )
     {
-        var result_type = result_types[i];
-        var description = SCHOOLMAP.result_types[result_type];
-        SCHOOLMAP.createHeadCell( tr, description, "average score" );
+        var order_by = order_bys[i];
+        var description = SCHOOLMAP.order_bys[order_by];
+        SCHOOLMAP.createHeadCell( tr, description, "Average Score" );
     }
     if ( SCHOOLMAP.place )
     {
-        SCHOOLMAP.createHeadCell( tr, "distance", "Distance from " + SCHOOLMAP.place.address );
+        SCHOOLMAP.createHeadCell( tr, "Distance", "Distance from " + SCHOOLMAP.place.address );
     }
 };
 
@@ -747,7 +746,7 @@ SCHOOLMAP.toggleLayer = function( i )
 
 SCHOOLMAP.initMap = function() 
 {
-    // $('input#address').autoResize();
+    console.log( "init map" );
     SCHOOLMAP.ignoreConsoleErrors();
     SCHOOLMAP.getQueryVariables();
     SCHOOLMAP.setParams();
@@ -781,7 +780,9 @@ SCHOOLMAP.initMap = function()
     var zoom = parseInt( SCHOOLMAP.params.zoom ) || SCHOOLMAP.default_zoom;
     SCHOOLMAP.map.setCenter( center, zoom );
     SCHOOLMAP.mgr = new MarkerManager( SCHOOLMAP.map );
-    SCHOOLMAP.gdir = new GDirections( SCHOOLMAP.map );
+    var directionsElement = document.getElementById( "directions" );
+    console.log( "directions div: " + directionsElement );
+    SCHOOLMAP.gdir = new GDirections( SCHOOLMAP.map, directionsElement );
     SCHOOLMAP.geocoder = new GClientGeocoder();
     SCHOOLMAP.geocoder.setBaseCountryCode( "uk" );
     GEvent.addListener( 
@@ -814,8 +815,8 @@ SCHOOLMAP.initMap = function()
                 SCHOOLMAP.map.setCenter( point );
                 SCHOOLMAP.map.setZoom( zoom );
                 var query_string = SCHOOLMAP.getQueryString();
-                var types_url = SCHOOLMAP.schools_url + "?" + query_string + "&types";
-                SCHOOLMAP.get( types_url, SCHOOLMAP.typesCallback );
+                var phases_url = SCHOOLMAP.schools_url + "?" + query_string + "&phases";
+                SCHOOLMAP.get( phases_url, SCHOOLMAP.phasesCallback );
                 SCHOOLMAP.setMapListeners();
                 SCHOOLMAP.getSchools();
             }
@@ -830,20 +831,20 @@ SCHOOLMAP.initMap = function()
 SCHOOLMAP.addLayerControls = function() 
 {
     var div = document.getElementById( "layers" );
-    for ( var type in SCHOOLMAP.layer_config )
+    for ( var layer in SCHOOLMAP.layer_config )
     {
-        SCHOOLMAP.layers[type] = new GLayer( SCHOOLMAP.layer_config[type] );
-        SCHOOLMAP.map.addOverlay( SCHOOLMAP.layers[type] );
+        SCHOOLMAP.layers[layer] = new GLayer( SCHOOLMAP.layer_config[layer] );
+        SCHOOLMAP.map.addOverlay( SCHOOLMAP.layers[layer] );
         var input = document.createElement( "INPUT" );
         input.type = "checkbox";
-        input.name = input.id = type;
+        input.name = input.id = layer;
         input.onchange = function() { SCHOOLMAP.toggleLayer( this ) };
-        if ( input.checked ) SCHOOLMAP.layers[type].show();
-        else SCHOOLMAP.layers[type].hide();
+        if ( input.checked ) SCHOOLMAP.layers[layer].show();
+        else SCHOOLMAP.layers[layer].hide();
         div.appendChild( input );
         var label = document.createElement( "LABEL" );
-        label.htmlFor = type;
-        label.appendChild( document.createTextNode( type ) );
+        label.htmlFor = layer;
+        label.appendChild( document.createTextNode( layer ) );
         div.appendChild( label );
     }
 };
@@ -879,38 +880,39 @@ SCHOOLMAP.createListTd = function( opts ) {
     return td;
 }
 
-SCHOOLMAP.getResultTypes = function()
+SCHOOLMAP.getOrderBys = function()
 {
-    var result_types_hash = {};
+    var order_bys_hash = {};
     for ( var i = 0; i < SCHOOLMAP.schools.length; i++ )
     {
         var school = SCHOOLMAP.schools[i];
-        for ( var result_type in SCHOOLMAP.result_types )
+        for ( var order_by in SCHOOLMAP.order_bys )
         {
-            var ave = "average_" + result_type;
-            if ( school[ave] && school[ave] != 0 )
+            var ave = "average_" + order_by;
+            if ( school[ave] && school[ave] != 0 && ! order_bys_hash[order_by] )
             {
-                result_types_hash[result_type] = true;
+                console.log( "add " + order_by );
+                order_bys_hash[order_by] = true;
             }
         }
     }
-    var result_types_array = [];
+    var order_bys_array = [];
     var sel = document.forms[0].order_by;
     var val = sel.value;
     SCHOOLMAP.removeChildren( sel );
     SCHOOLMAP.addOpt( sel, { val: "", str: "-" } );
     SCHOOLMAP.addOpt( sel, { val: "distance", str: "Distance" } );
-    for ( var result_type in result_types_hash )
+    for ( var order_by in order_bys_hash )
     {
-        result_types_array.push( result_type );
-        var description = SCHOOLMAP.result_types[result_type];
-        SCHOOLMAP.addOpt( sel, { val: result_type, str: description } );
+        order_bys_array.push( order_by );
+        var description = SCHOOLMAP.order_bys[order_by];
+        SCHOOLMAP.addOpt( sel, { val: order_by, str: description } );
     }
     sel.value = val;
-    return result_types_array;
+    return order_bys_array;
 };
 
-SCHOOLMAP.createListRow = function( no, school, result_types ) 
+SCHOOLMAP.createListRow = function( no, school, order_bys ) 
 {
     var tr = document.createElement( "TR" );
     var url = false;
@@ -920,8 +922,8 @@ SCHOOLMAP.createListRow = function( no, school, result_types )
     }
     tr.appendChild( SCHOOLMAP.createListTd( { "text":no+1, "url":url, "school":school } ) );
     tr.appendChild( SCHOOLMAP.createListTd( { "text":school.name, "url":url, "school":school } ) );
-    // tr.appendChild( SCHOOLMAP.createListTd( { "text":school.type, "url":url, "school":school } ) );
-    tr.appendChild( SCHOOLMAP.createListTd( { "text":school.TYPE_OF_ESTAB, "url":url, "school":school } ) );
+    tr.appendChild( SCHOOLMAP.createListTd( { "text":school.phase, "url":url, "school":school } ) );
+    tr.appendChild( SCHOOLMAP.createListTd( { "text":school.type, "url":url, "school":school } ) );
     if ( school.ofsted_url ) 
     {
         var url = SCHOOLMAP.school_url + "?table=ofsted&id=" + school.ofsted_id;
@@ -931,14 +933,14 @@ SCHOOLMAP.createListRow = function( no, school, result_types )
     {
         tr.appendChild( SCHOOLMAP.createListTd( { text:"no" } ) );
     }
-    for ( var i = 0; i <  result_types.length; i++ )
+    for ( var i = 0; i <  order_bys.length; i++ )
     {
-        var result_type = result_types[i];
-        var ave = "average_" + result_type;
+        var order_by = order_bys[i];
+        var ave = "average_" + order_by;
         if ( school[ave] && school[ave] != 0 )
         {
             var val = school[ave];
-            var url = SCHOOLMAP.school_url + "?table=dcsf&type=" + result_type + "&id=" + school.dcsf_id;
+            var url = SCHOOLMAP.school_url + "?table=dcsf&type=" + order_by + "&id=" + school.dcsf_id;
             var td = SCHOOLMAP.createListTd( { "text":val, "url":url, "school":school } );
         }
         else
@@ -981,13 +983,13 @@ SCHOOLMAP.createListTable = function()
     table.appendChild( tbody );
     var tr = document.createElement( "TR" );
     tbody.appendChild( tr );
-    result_types = SCHOOLMAP.getResultTypes();
-    SCHOOLMAP.initTableHead( tr, result_types );
+    order_bys = SCHOOLMAP.getOrderBys();
+    SCHOOLMAP.initTableHead( tr, order_bys );
     tbody.appendChild( tr );
     for ( var i = 0; i < SCHOOLMAP.schools.length; i++ )
     {
         var school = SCHOOLMAP.schools[i];
-        var tr = SCHOOLMAP.createListRow( i, school, result_types );
+        var tr = SCHOOLMAP.createListRow( i, school, order_bys );
         tbody.appendChild( tr );
     }
     var ncells = tr.childNodes.length;
@@ -1019,7 +1021,7 @@ SCHOOLMAP.changeLinksColour = function( school, color )
     var links = school.links;
     if ( ! links ) 
     {
-        console.error( "no links for " + school.name );
+        console.log( "no links for " + school.name );
         return;
     }
     for ( var i = 0; i < links.length; i++ )
