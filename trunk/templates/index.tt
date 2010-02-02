@@ -9,7 +9,7 @@
         <li>
             [% IF address %]address[% ELSE %]first, type in your address or postcode[% END %]
             <input id="address" name="address" value="[% address | html_entity %]" />
-            [% IF address && ! location %]
+            [% IF 0 && address && ! location %]
                 <span class="error">address not recognised</span>
             [% END %]
         </li>
@@ -48,7 +48,7 @@
     </td>
 </tr></table>
 </form>
-[% IF location %]
+[% IF address %]
     [% INCLUDE map.tt %]
 [% END %]
 [% END %]

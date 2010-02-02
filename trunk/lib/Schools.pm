@@ -84,18 +84,16 @@ sub where
 {
     my $self = shift;
     my @args;
-    my @where = ( 
-        "school.postcode = postcode.code", 
-    );
+    my @where = ( );
     if ( $self->{minLon} && $self->{maxLon} && $self->{minLat} && $self->{maxLat} )
     {
         push( 
             @where,
             (
-                "postcode.lon > ?",
-                "postcode.lon < ?",
-                "postcode.lat > ?",
-                "postcode.lat < ?",
+                "school.lon > ?",
+                "school.lon < ?",
+                "school.lat > ?",
+                "school.lat < ?",
             )
         );
         push( @args, $self->{minLon}, $self->{maxLon}, $self->{minLat}, $self->{maxLat} );
@@ -123,24 +121,23 @@ sub geo_where
     my $self = shift;
     return ( "", "school" ) unless $self->{minLon} && $self->{maxLon} && $self->{minLat} && $self->{maxLat};
     my @where = (
-        "school.postcode = postcode.code", 
-        "postcode.lon > ?",
-        "postcode.lon < ?",
-        "postcode.lat > ?",
-        "postcode.lat < ?",
+        "school.lon > ?",
+        "school.lon < ?",
+        "school.lat > ?",
+        "school.lat < ?",
     );
     my @args = ( $self->{minLon}, $self->{maxLon}, $self->{minLat}, $self->{maxLat} );
     my $where = "WHERE " . join( " AND ", @where );
-    return ( $where, "school,postcode", @args );
+    return ( $where, "school", @args );
 }
 
 sub get_schools
 {
     my $self = shift;
-    my @what = ( "postcode.*,school.*,dcsf.*" );
+    my @what = ( "school.*,dcsf.*" );
     my $what = join( ",", @what );
     my ( $where, @args ) = $self->where;
-    my @from = ( "postcode", "school" );
+    my @from = ( "school" );
     my %join = ( 
         "edubase" => "ON school.ofsted_id = edubase.URN",
         "dcsf" => "ON school.dcsf_id = dcsf.dcsf_id",

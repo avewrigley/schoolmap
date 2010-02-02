@@ -24,8 +24,8 @@ warn "get school phases\n";
 $formdata{phases} = $schools->get_phases;
 $formdata{order_bys} = $schools->get_order_bys;
 my $template_file = 'index.tt';
-$formdata{apikey} = $config->{apikey};
-if ( $formdata{address} )
+$formdata{$_} = $config->{$_} for keys %$config;
+if ( 0 && $formdata{address} )
 {
     my $geocoder = Geo::Coder::Google->new(
         apikey => $config->{apikey},

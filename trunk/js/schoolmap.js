@@ -6,7 +6,6 @@ var SCHOOLMAP = {
     schools:[],
     params:{},
     nschools:0,
-    place:false,
     order_bys:{ 
         "primary":"Key stage 2",
         "ks3":"Key stage 3",
@@ -31,6 +30,64 @@ var SCHOOLMAP = {
     layers:{},
     addressMarker:false
 };
+
+SCHOOLMAP.updateAddress = function( point, address )
+{
+    SCHOOLMAP.point = point;
+    SCHOOLMAP.createAddressMarker();
+    var input = document.getElementById( "address" );
+    SCHOOLMAP.address = input.value = address;
+    var span = document.getElementById( "coords" );
+    SCHOOLMAP.setText( span, "( lat: " + point.lat() + ", lng: " + point.lng() + ")" );
+};
+
+SCHOOLMAP.findAddressUsingLocalsearch = function( query, callback ) 
+{
+    SCHOOLMAP.localSearch.setSearchCompleteCallback(
+        null, 
+        function() {
+            var result = SCHOOLMAP.localSearch.results[0];
+            if ( result ) 
+            {    
+                var lat = result.lat;
+                var lng = result.lng;
+                var title = result.addressLines.join( ", " );
+                var point = new GLatLng( lat, lng );
+                console.log( result );
+                console.log( title );
+                SCHOOLMAP.updateAddress( point, title );
+                callback( point );
+            }
+            else
+            {
+                alert("\"" + query + "\" not found");
+            }
+        }
+    );  
+    SCHOOLMAP.localSearch.execute( query );
+}
+
+SCHOOLMAP.findAddressUsingGClientGeocoder = function( query, callback ) 
+{
+    SCHOOLMAP.geocoder.getLocations( 
+        query, 
+        function ( response ) {
+            if ( ! response || response.Status.code != 200 ) 
+            {
+                alert("\"" + query + "\" not found");
+                return;
+            }
+            var place = response.Placemark[0];
+            SCHOOLMAP.drawBoundingBox( place );
+            var point = SCHOOLMAP.place2point( place );
+            var address = place.address;
+            SCHOOLMAP.updateAddress( point, address );
+            if ( callback ) callback( point );
+        }
+    );
+};
+
+SCHOOLMAP.findAddress = SCHOOLMAP.findAddressUsingLocalsearch;
 
 SCHOOLMAP.setMapListeners = function() 
 {
@@ -85,10 +142,10 @@ SCHOOLMAP.createAddressIcon = function()
 
 SCHOOLMAP.createAddressMarker = function() 
 {
-    if ( ! SCHOOLMAP.place ) return;
+    if ( ! SCHOOLMAP.point ) return;
     if ( SCHOOLMAP.addressMarker ) return;
     SCHOOLMAP.addressMarker = new GMarker( 
-        SCHOOLMAP.place.point, 
+        SCHOOLMAP.point, 
         { draggable: true, icon:SCHOOLMAP.createAddressIcon() } 
     );
     GEvent.addListener( 
@@ -114,26 +171,17 @@ SCHOOLMAP.removeSchoolMarkers = function()
     SCHOOLMAP.mgr.clearMarkers();
 };
 
-SCHOOLMAP.findAddress = function( query, callback ) 
+SCHOOLMAP.drawBoundingBox = function( place )
 {
-    SCHOOLMAP.geocoder.getLocations( 
-        query, 
-        function ( response ) {
-            if ( ! response || response.Status.code != 200 ) 
-            {
-                alert("\"" + query + "\" not found");
-                return;
-            }
-            SCHOOLMAP.place = response.Placemark[0];
-            var point = SCHOOLMAP.place.point = SCHOOLMAP.place2point( SCHOOLMAP.place );
-            SCHOOLMAP.createAddressMarker();
-            var input = document.getElementById( "address" );
-            input.value = SCHOOLMAP.place.address;
-            var span = document.getElementById( "coords" );
-            SCHOOLMAP.setText( span, "( lat: " + SCHOOLMAP.place.point.lat() + ", lng: " + SCHOOLMAP.place.point.lng() + ")" );
-            if ( callback ) callback( point );
-        }
-    );
+    var box = place.ExtendedData.LatLonBox;
+    var ne = new GLatLng( box.north, box.east );
+    var nw = new GLatLng( box.north, box.west );
+    var se = new GLatLng( box.south, box.east );
+    var sw = new GLatLng( box.south, box.west );
+    var points = new Array( ne, nw, sw, se, ne );
+    if ( SCHOOLMAP.polyline ) SCHOOLMAP.map.removeOverlay( SCHOOLMAP.polyline );
+    SCHOOLMAP.polyline = new GPolyline( points );
+    SCHOOLMAP.map.addOverlay( SCHOOLMAP.polyline );
 };
 
 SCHOOLMAP.removeChildren = function( parent ) {
@@ -573,11 +621,10 @@ SCHOOLMAP.setDistanceListeners = function( successcallback, allcallback )
 
 SCHOOLMAP.calculateDistance = function( school, callback ) 
 {
-    if ( ! SCHOOLMAP.place ) return;
+    if ( ! SCHOOLMAP.point ) return;
     var from = school.lat + "," + school.lon;
-    var point = SCHOOLMAP.place.point;
+    var point = SCHOOLMAP.point;
     var to = point.lat() + "," + point.lng();
-    // var to = SCHOOLMAP.place.address;
     school.directions_text = "from " + from + " to " + to;
     console.log( school.name + " calculate distance: " + school.directions_text );
     try {
@@ -709,9 +756,9 @@ SCHOOLMAP.initTableHead = function( tr, order_bys )
         var description = SCHOOLMAP.order_bys[order_by];
         SCHOOLMAP.createHeadCell( tr, description, "Average Score" );
     }
-    if ( SCHOOLMAP.place )
+    if ( SCHOOLMAP.point )
     {
-        SCHOOLMAP.createHeadCell( tr, "Distance", "Distance from " + SCHOOLMAP.place.address );
+        SCHOOLMAP.createHeadCell( tr, "Distance", "Distance from " + SCHOOLMAP.address );
     }
 };
 
@@ -784,6 +831,7 @@ SCHOOLMAP.initMap = function()
     console.log( "directions div: " + directionsElement );
     SCHOOLMAP.gdir = new GDirections( SCHOOLMAP.map, directionsElement );
     SCHOOLMAP.geocoder = new GClientGeocoder();
+    SCHOOLMAP.localSearch = new GlocalSearch();
     SCHOOLMAP.geocoder.setBaseCountryCode( "uk" );
     GEvent.addListener( 
         SCHOOLMAP.map, 
@@ -949,7 +997,7 @@ SCHOOLMAP.createListRow = function( no, school, order_bys )
         }
         tr.appendChild( td );
     }
-    if ( SCHOOLMAP.place )
+    if ( SCHOOLMAP.point )
     {
         var text = "-";
         if ( school.meters ) text = SCHOOLMAP.convertMeters( school.meters );
@@ -993,7 +1041,7 @@ SCHOOLMAP.createListTable = function()
         tbody.appendChild( tr );
     }
     var ncells = tr.childNodes.length;
-    if ( SCHOOLMAP.place )
+    if ( SCHOOLMAP.point )
     {
         var tr = document.createElement( "TR" );
         tbody.appendChild( tr );
