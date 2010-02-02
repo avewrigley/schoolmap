@@ -138,10 +138,7 @@ sub get_schools
     my $what = join( ",", @what );
     my ( $where, @args ) = $self->where;
     my @from = ( "school" );
-    my %join = ( 
-        "edubase" => "ON school.ofsted_id = edubase.URN",
-        "dcsf" => "ON school.dcsf_id = dcsf.dcsf_id",
-    );
+    my %join = ( "dcsf" => "ON school.dcsf_id = dcsf.dcsf_id" );
     my $from = join( ",", @from );
     my $join = join( " ", map "LEFT JOIN $_ $join{$_}", keys %join );
     my $sql = <<EOF;
