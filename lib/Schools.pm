@@ -153,11 +153,9 @@ EOF
     {
         $sql .= " ORDER BY name";
     }
-    unless ( $self->{nolimit} )
+    if ( defined $self->{limit} )
     {
-        my $limit = 50;
-        $limit = $self->{limit} if defined $self->{limit};
-        $sql .= " LIMIT $limit";
+        $sql .= " LIMIT $self->{limit}";
     }
     warn "$sql\n";
     warn "ARGS: @args\n";

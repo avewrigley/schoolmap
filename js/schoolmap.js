@@ -1,5 +1,6 @@
 var SCHOOLMAP = {
     default_zoom:12,
+    min_zoom:11,
     default_center:new GLatLng( 53.82659674299412, -1.86767578125 ),
     schools_url:"schools",
     school_url:"school",
@@ -94,13 +95,26 @@ SCHOOLMAP.setMapListeners = function()
     SCHOOLMAP.handle_zoom = GEvent.addListener( 
         SCHOOLMAP.map, 
         "zoomend", 
-        function() { SCHOOLMAP.getSchools(); }
+        function() { 
+            var zoom = SCHOOLMAP.map.getZoom();
+            console.log( "zoom = " + zoom );
+            console.log( "min zoom = " + SCHOOLMAP.min_zoom );
+            if ( zoom >= SCHOOLMAP.min_zoom )
+            {
+                SCHOOLMAP.getSchools(); 
+            }
+        }
     );
     SCHOOLMAP.handle_move = GEvent.addListener( 
         SCHOOLMAP.map, 
         "moveend", 
         function() {
-            SCHOOLMAP.getSchools();
+            var zoom = SCHOOLMAP.map.getZoom();
+            console.log( "zoom = " + zoom );
+            if ( zoom >= SCHOOLMAP.default_zoom )
+            {
+                SCHOOLMAP.getSchools(); 
+            }
         }
     );
 };
@@ -155,8 +169,8 @@ SCHOOLMAP.createAddressMarker = function()
             SCHOOLMAP.findAddress( 
                 latlng.lat() + "," + latlng.lng(),
                 function( point ) {
-                    SCHOOLMAP.resetDistances();
-                    SCHOOLMAP.updateSchools();
+                    SCHOOLMAP.address_changed = true;
+                    SCHOOLMAP.getSchools(); 
                 }
             );
         }
@@ -364,6 +378,12 @@ SCHOOLMAP.getSchoolsCallback = function( response )
     else
     {
         console.log( "schools not changed" );
+        if ( SCHOOLMAP.address_changed )
+        {
+            SCHOOLMAP.address_changed = false;
+            SCHOOLMAP.resetDistances();
+            SCHOOLMAP.updateSchools();
+        }
     }
 };
 
@@ -651,6 +671,17 @@ SCHOOLMAP.calculateDistance = function( school, callback )
     }
 };
 
+SCHOOLMAP.addLink = function( div, url, text )
+{
+    var p = document.createElement( "P" );
+    var a = document.createElement( "A" );
+    a.href = url;
+    a.target = "_blank";
+    a.appendChild( document.createTextNode( text ) );
+    p.appendChild( a );
+    div.appendChild( p );
+};
+
 SCHOOLMAP.createInfoWindow = function( school )
 {
     var div = document.createElement( "DIV" );
@@ -666,28 +697,20 @@ SCHOOLMAP.createInfoWindow = function( school )
         p.appendChild( document.createElement( "BR" ) );
     }
     div.appendChild( p );
-    if ( school.HEAD_LAST )
-    {
-        var head = school.HEAD_TITLE + " " + school.HEAD_FIRST + " " + school.HEAD_LAST;
-        p = document.createElement( "P" );
-        p.appendChild( 
-            document.createTextNode( "Head: " + head )
-        );
-        if ( school.HEAD_HONOUR )
-        {
-            p.appendChild( document.createElement( "BR" ) );
-            p.appendChild( document.createTextNode( school.HEAD_HONOUR ) );
-        }
-        div.appendChild( p );
-    }
     if ( school.ofsted_url ) 
     {
-        p = document.createElement( "P" );
-        var a = document.createElement( "A" );
-        a.href = school.ofsted_url;
-        a.appendChild( document.createTextNode( "Ofsted report" ) );
-        p.appendChild( a );
-        div.appendChild( p );
+        SCHOOLMAP.addLink( div, school.ofsted_url, "Ofsted report" );
+    }
+    for ( var order_by in SCHOOLMAP.order_bys )
+    {
+        var key = order_by + "_url";
+        var url = school[key];
+        if ( url )
+        {
+            var ave = "average_" + order_by;
+            var text = SCHOOLMAP.order_bys[order_by] + " (" + school[ave] + ")";
+            SCHOOLMAP.addLink( div, url, text );
+        }
     }
     return div;
 };
@@ -897,32 +920,31 @@ SCHOOLMAP.addLayerControls = function()
     }
 };
 
-SCHOOLMAP.createListTd = function( opts ) {
+SCHOOLMAP.createListTd = function( opts ) 
+{
     var td = document.createElement( "TD" );
-    if ( opts.url )
-    {
-        var a = document.createElement( "A" );
-        a.target = "_blank";
-        a.onclick = function() { window.open( opts.url, "school", "status,scrollbars,resizable,width=800,height=600" ); return false; };
-        a.href = opts.url;
-        var school = opts.school;
-        if ( ! school.links ) school.links = new Array();
-        school.links.push( a );
-        var text = "-";
-        if ( opts.text && opts.text != "null" ) text = opts.text;
-        a.appendChild( document.createTextNode( text ) );
-        td.appendChild( a );
-        a.onmouseover = function() {
-            SCHOOLMAP.activateSchool( school );
-        };
-        a.onmouseout = function() {
-            SCHOOLMAP.deActivateSchool( school );
-        };
-    }
-    else
-    {
-        td.appendChild( document.createTextNode( opts.text ) );
-    }
+    var a = document.createElement( "A" );
+    a.onclick = function() { 
+        console.log( "click" ); 
+        var marker = school.marker;
+        var div = SCHOOLMAP.createInfoWindow( school );
+        marker.openInfoWindow( div );
+        return false; 
+    };
+    a.href = "";
+    var school = opts.school;
+    if ( ! school.links ) school.links = new Array();
+    school.links.push( a );
+    var text = "-";
+    if ( opts.text && opts.text != "null" ) text = opts.text;
+    a.appendChild( document.createTextNode( text ) );
+    td.appendChild( a );
+    a.onmouseover = function() {
+        SCHOOLMAP.activateSchool( school );
+    };
+    a.onmouseout = function() {
+        SCHOOLMAP.deActivateSchool( school );
+    };
     td.style.verticalAlign = "top";
     if ( opts.nowrap ) td.style.whiteSpace = "nowrap";
     return td;
@@ -963,23 +985,17 @@ SCHOOLMAP.getOrderBys = function()
 SCHOOLMAP.createListRow = function( no, school, order_bys ) 
 {
     var tr = document.createElement( "TR" );
-    var url = false;
-    if ( school.dcsf_id && typeof school.dcsf_id != "undefined" )
-    {
-        url = SCHOOLMAP.school_url + "?table=dcsf&id=" + school.dcsf_id;
-    }
-    tr.appendChild( SCHOOLMAP.createListTd( { "text":no+1, "url":url, "school":school } ) );
-    tr.appendChild( SCHOOLMAP.createListTd( { "text":school.name, "url":url, "school":school } ) );
-    tr.appendChild( SCHOOLMAP.createListTd( { "text":school.phase, "url":url, "school":school } ) );
-    tr.appendChild( SCHOOLMAP.createListTd( { "text":school.type, "url":url, "school":school } ) );
+    tr.appendChild( SCHOOLMAP.createListTd( { "text":no+1, "school":school } ) );
+    tr.appendChild( SCHOOLMAP.createListTd( { "text":school.name, "school":school } ) );
+    tr.appendChild( SCHOOLMAP.createListTd( { "text":school.phase, "school":school } ) );
+    tr.appendChild( SCHOOLMAP.createListTd( { "text":school.type, "school":school } ) );
     if ( school.ofsted_url ) 
     {
-        var url = SCHOOLMAP.school_url + "?table=ofsted&id=" + school.ofsted_id;
-        tr.appendChild( SCHOOLMAP.createListTd( { "text":"yes", "url":url, "school":school } ) );
+        tr.appendChild( SCHOOLMAP.createListTd( { "text":"yes", "school":school } ) );
     }
     else
     {
-        tr.appendChild( SCHOOLMAP.createListTd( { text:"no" } ) );
+        tr.appendChild( SCHOOLMAP.createListTd( { text:"no", "school":school } ) );
     }
     for ( var i = 0; i <  order_bys.length; i++ )
     {
@@ -988,12 +1004,11 @@ SCHOOLMAP.createListRow = function( no, school, order_bys )
         if ( school[ave] && school[ave] != 0 )
         {
             var val = school[ave];
-            var url = SCHOOLMAP.school_url + "?table=dcsf&type=" + order_by + "&id=" + school.dcsf_id;
-            var td = SCHOOLMAP.createListTd( { "text":val, "url":url, "school":school } );
+            var td = SCHOOLMAP.createListTd( { "text":val, "school":school } );
         }
         else
         {
-            var td = SCHOOLMAP.createListTd( { "text":"-" } );
+            var td = SCHOOLMAP.createListTd( { "text":"-", "school":school } );
         }
         tr.appendChild( td );
     }
@@ -1001,7 +1016,7 @@ SCHOOLMAP.createListRow = function( no, school, order_bys )
     {
         var text = "-";
         if ( school.meters ) text = SCHOOLMAP.convertMeters( school.meters );
-        school.distance_td = SCHOOLMAP.createListTd( { "text":text } );
+        school.distance_td = SCHOOLMAP.createListTd( { "text":text, "school":school } );
         tr.appendChild( school.distance_td );
     }
     return tr;

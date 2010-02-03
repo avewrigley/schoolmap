@@ -92,7 +92,8 @@ table#main td.half {
 
 #directions {
     display: none;
-    width: 0; height; 0;
+    width: 0; 
+    height: 0;
 }
 
 div#layers {
@@ -126,8 +127,8 @@ div#layers {
 li { padding: 5px; }
 
 .infoWindow {
-    width: 200px;
-    height: 100px;
+    width: 150px;
+    height: 130px;
 }
 
 input#address {
