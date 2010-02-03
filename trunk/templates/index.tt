@@ -1,10 +1,10 @@
 [% WRAPPER wrapper.tt %]
-<table><tr>
 <form method="get" action="index.cgi">
+<table><tr>
     <td id="options">
-    <input type="hidden" name="zoom" id="zoom" value="">
-    <input type="hidden" name="centerLat" id="centerLat" value="">
-    <input type="hidden" name="centerLng" id="centerLng" value="">
+    <input type="hidden" name="zoom" id="zoom" value="" />
+    <input type="hidden" name="centerLat" id="centerLat" value="" />
+    <input type="hidden" name="centerLng" id="centerLng" value="" />
     <ol>
         <li>
             [% IF address %]address[% ELSE %]first, type in your address or postcode[% END %]

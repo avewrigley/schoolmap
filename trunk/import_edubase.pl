@@ -35,7 +35,8 @@ my $cvsfile = shift or die "usage: $0 <csvfile>\n";
 
 my $mech = WWW::Mechanize->new();
 my $dbh = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
-my $school_sth = $dbh->prepare( "REPLACE INTO school (name, postcode, lat, lon, address, type, phase, ofsted_url, ofsted_id) VALUES (?,?,?,?,?,?,?,?,?)" );
+my $dcsf_sth = $dbh->prepare( "SELECT dcsf_id FROM school WHERE ofsted_id = ?" );
+my $school_sth = $dbh->prepare( "REPLACE INTO school (name, postcode, lat, lon, address, type, phase, ofsted_url, ofsted_id, dcsf_id) VALUES (?,?,?,?,?,?,?,?,?,?)" );
 my $csv = Text::CSV->new ( { binary => 1 } ) or die "Cannot use CSV: ".Text::CSV->error_diag ();
 open my $fh, "<:encoding(utf8)", $cvsfile or die "$cvsfile: $!";
 my $header = $csv->getline( $fh );
@@ -60,11 +61,13 @@ sub add_school
     {
         warn "No $_\n" and return unless $edubase->{$_};
     }
+    $dcsf_sth->execute( $edubase->{URN} );
+    ( $edubase->{dcsf_id} ) = $dcsf_sth->fetchrow();
     $edubase->{Postcode} =~ s/\s//g;
     my $easting = $edubase->{Easting};
     my $northing = $edubase->{Northing};
     ( $edubase->{lat}, $edubase->{lon} ) = grid_to_ll( $easting, $northing );
-    warn "$edubase->{EstablishmentName} ($edubase->{URN}) $easting $northing $edubase->{Postcode} ($edubase->{lat}, $edubase->{lon})\n";
+    warn "$edubase->{EstablishmentName} ($edubase->{URN}, $edubase->{dcsf_id}) $easting $northing $edubase->{Postcode} ($edubase->{lat}, $edubase->{lon})\n";
     $edubase->{address} = join( ",", grep { defined $_ && length $_ } map $edubase->{$_}, qw( Street Locality Town LLSC ) );
     $edubase->{ofsted_url} = $ofsted_base_url . $edubase->{URN};
     # warn "GET $edubase->{ofsted_url}\n";
