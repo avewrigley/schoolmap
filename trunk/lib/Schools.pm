@@ -134,7 +134,11 @@ sub geo_where
 sub get_schools
 {
     my $self = shift;
-    my @what = ( "school.*,dcsf.*" );
+    my @what = ( "school.*" ,"dcsf.*" );
+    if ( $self->{distance} )
+    {
+        push( @what, "" );
+    }
     my $what = join( ",", @what );
     my ( $where, @args ) = $self->where;
     my @from = ( "school" );
