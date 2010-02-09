@@ -1,3 +1,18 @@
+$(document).ready(
+    function()
+    {
+        $("#schoolmap_form").validate( {
+            rules: {
+                limit: {
+                    required: true,
+                    min: 0,
+                    max: 100
+                }
+            }
+        } );
+    }
+);
+
 var SCHOOLMAP = {
     default_zoom:12,
     min_zoom:11,
@@ -307,11 +322,16 @@ SCHOOLMAP.getQueryString = function()
         "&minLat=" + escape( sw.lat() ) + 
         "&maxLat=" + escape( ne.lat() )
     ;
+    if ( SCHOOLMAP.point ) 
+    {
+        query_string = query_string + "&lon=" + escape( SCHOOLMAP.point.lng() ) + "&lat=" + escape( SCHOOLMAP.point.lat() );
+
+    }
     var order_by = document.forms[0].order_by;
     if ( order_by ) 
     {
         var order_by_val = order_by.value;
-        if ( order_by_val == "distance" ) order_by_val = "";
+        // if ( order_by_val == "distance" ) order_by_val = "";
         query_string = query_string + "&order_by=" + escape( order_by_val );
     }
     var phase = document.forms[0].phase;
@@ -333,6 +353,7 @@ SCHOOLMAP.getSchools = function()
     var query_string = SCHOOLMAP.getQueryString();
     var url = SCHOOLMAP.schools_url + "?" + query_string;
     SCHOOLMAP.createLinkTo( query_string );
+    console.log( "GET " + url );
     SCHOOLMAP.getJSON( url, SCHOOLMAP.getSchoolsCallback );
 };
 
@@ -390,11 +411,11 @@ SCHOOLMAP.getSchoolsCallback = function( response )
 SCHOOLMAP.updateSchools = function()
 {
     var order_by = document.forms[0].order_by.value;
-    if ( order_by == "distance" )
-    {
-        SCHOOLMAP.calculateAllDistances( SCHOOLMAP.redrawSchools );
-    }
-    else
+    // if ( order_by == "distance" )
+    // {
+        // SCHOOLMAP.calculateAllDistances( SCHOOLMAP.redrawSchools );
+    // }
+    // else
     {
         SCHOOLMAP.redrawSchools( SCHOOLMAP.calculateAllDistances );
     }
@@ -468,19 +489,6 @@ SCHOOLMAP.activateSchool = function( school )
     }
     SCHOOLMAP.changeMarkerColour( school, phase.active_colour )
     if ( SCHOOLMAP.active_school ) SCHOOLMAP.deActivateSchool( SCHOOLMAP.active_school );
-    if ( 0 && ! SCHOOLMAP.calculatingDistances )
-    {
-        SCHOOLMAP.setDistanceListeners( 
-            function( meters ) {
-                var m = SCHOOLMAP.convertMeters( meters );
-                window.status = "distance to " + school.name + " = " + m;
-            }
-        );
-        SCHOOLMAP.gdir.load( 
-            school.directions_text,
-            { preserveViewport:true, travelMode: G_TRAVEL_MODE_WALKING }
-        );
-    }
     SCHOOLMAP.active_school = school;
     window.status = school.name;
 }
@@ -568,10 +576,10 @@ SCHOOLMAP.calculateAllDistances = function( callback )
     }
     SCHOOLMAP.gdir.clear();
     var order_by = document.forms[0].order_by.value;
-    if ( order_by == "distance" )
-    {
-        SCHOOLMAP.schools = SCHOOLMAP.schools.sort( SCHOOLMAP.sortByDistance );
-    }
+    // if ( order_by == "distance" )
+    // {
+        // SCHOOLMAP.schools = SCHOOLMAP.schools.sort( SCHOOLMAP.sortByDistance );
+    // }
     SCHOOLMAP.calculatingDistances = false;
     if ( callback ) callback();
 }
@@ -598,9 +606,10 @@ SCHOOLMAP.removeDistanceListeners = function( )
 
 SCHOOLMAP.convertMeters = function( m ) 
 {
+    m = Math.round( m );
     if ( m < 1000 ) return m + " m";
     var km = m / 1000;
-    return km + " km";
+    return km.toPrecision( 3 ) + " km";
 }
 
 SCHOOLMAP.setDistanceListeners = function( successcallback, allcallback ) 
@@ -654,9 +663,10 @@ SCHOOLMAP.calculateDistance = function( school, callback )
                 school.meters = meters;
                 if ( school.distance_td ) 
                 {
-                    var m = SCHOOLMAP.convertMeters( school.meters );
+                    var text = SCHOOLMAP.convertMeters( school.meters );
+                    var a = SCHOOLMAP.createListTdContents( { "text":text, "school":school } );
                     SCHOOLMAP.removeChildren( school.distance_td );
-                    school.distance_td.appendChild( document.createTextNode( m ) );
+                    school.distance_td.appendChild( a );
                 }
             },
             callback 
@@ -781,7 +791,8 @@ SCHOOLMAP.initTableHead = function( tr, order_bys )
     }
     if ( SCHOOLMAP.point )
     {
-        SCHOOLMAP.createHeadCell( tr, "Distance", "Distance from " + SCHOOLMAP.address );
+        SCHOOLMAP.createHeadCell( tr, "Distance (crow flies)", "Distance from " + SCHOOLMAP.address );
+        SCHOOLMAP.createHeadCell( tr, "Distance (walking)", "Distance from " + SCHOOLMAP.address );
     }
 };
 
@@ -920,9 +931,8 @@ SCHOOLMAP.addLayerControls = function()
     }
 };
 
-SCHOOLMAP.createListTd = function( opts ) 
+SCHOOLMAP.createListTdContents = function( opts ) 
 {
-    var td = document.createElement( "TD" );
     var a = document.createElement( "A" );
     a.onclick = function() { 
         console.log( "click" ); 
@@ -938,17 +948,24 @@ SCHOOLMAP.createListTd = function( opts )
     var text = "-";
     if ( opts.text && opts.text != "null" ) text = opts.text;
     a.appendChild( document.createTextNode( text ) );
-    td.appendChild( a );
     a.onmouseover = function() {
         SCHOOLMAP.activateSchool( school );
     };
     a.onmouseout = function() {
         SCHOOLMAP.deActivateSchool( school );
     };
+    return a;
+};
+
+SCHOOLMAP.createListTd = function( opts ) 
+{
+    var td = document.createElement( "TD" );
+    var a = SCHOOLMAP.createListTdContents( opts );
+    td.appendChild( a );
     td.style.verticalAlign = "top";
     if ( opts.nowrap ) td.style.whiteSpace = "nowrap";
     return td;
-}
+};
 
 SCHOOLMAP.getOrderBys = function()
 {
@@ -1015,6 +1032,10 @@ SCHOOLMAP.createListRow = function( no, school, order_bys )
     if ( SCHOOLMAP.point )
     {
         var text = "-";
+        if ( school.distance ) text = SCHOOLMAP.convertMeters( school.distance * 1000 );
+        td = SCHOOLMAP.createListTd( { "text":text, "school":school } );
+        tr.appendChild( td );
+        text = "-";
         if ( school.meters ) text = SCHOOLMAP.convertMeters( school.meters );
         school.distance_td = SCHOOLMAP.createListTd( { "text":text, "school":school } );
         tr.appendChild( school.distance_td );

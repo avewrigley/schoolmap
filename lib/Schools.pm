@@ -135,13 +135,17 @@ sub get_schools
 {
     my $self = shift;
     my @what = ( "school.*" ,"dcsf.*" );
-    if ( $self->{distance} )
+    my @from = ( "school" );
+    my ( $where, @args ) = $self->where;
+    if ( $self->{lat} && $self->{lon} )
     {
-        push( @what, "" );
+        my $distance_sql = <<EOF;
+(((acos(sin((?*pi()/180)) * sin((lat*pi()/180))+cos((?*pi()/180)) * cos((lat*pi()/180)) * cos(((?-lon)*pi()/180))))*180/pi())*60*1.1515*1.609344) as distance
+EOF
+        push( @what, $distance_sql );
+        unshift( @args, $self->{lat}, $self->{lat}, $self->{lon} );
     }
     my $what = join( ",", @what );
-    my ( $where, @args ) = $self->where;
-    my @from = ( "school" );
     my %join = ( "dcsf" => "ON school.dcsf_id = dcsf.dcsf_id" );
     my $from = join( ",", @from );
     my $join = join( " ", map "LEFT JOIN $_ $join{$_}", keys %join );
@@ -151,11 +155,14 @@ SELECT SQL_CALC_FOUND_ROWS $what FROM $from $join
 EOF
     if ( $self->{order_by} )
     {
-        $sql .= " ORDER BY average_$self->{order_by} DESC";
-    }
-    else
-    {
-        $sql .= " ORDER BY name";
+        if ( $self->{order_by} eq 'distance' )
+        {
+            $sql .= " ORDER BY distance";
+        }
+        else
+        {
+            $sql .= " ORDER BY average_$self->{order_by} DESC";
+        }
     }
     if ( defined $self->{limit} )
     {
