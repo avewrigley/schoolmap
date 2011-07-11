@@ -38,10 +38,12 @@
                     [% END %]
                 </select>
             </li>
+            <!--
             <li>
                 <label for="limit">limt</label>
                 <input id="limit" name="limit" />
             </li>
+            -->
         [% END %]
     </ol>
     </td>
