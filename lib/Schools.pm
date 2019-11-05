@@ -146,7 +146,7 @@ EOF
         unshift( @args, $self->{lat}, $self->{lat}, $self->{lon} );
     }
     my $what = join( ",", @what );
-    my %join = ( "dcsf" => "ON school.dcsf_id = dcsf.dcsf_id" );
+    my %join = ( "dcsf" => "ON school.ofsted_id = dcsf.ofsted_id" );
     my $from = join( ",", @from );
     my $join = join( " ", map "LEFT JOIN $_ $join{$_}", keys %join );
     my $sql = <<EOF;

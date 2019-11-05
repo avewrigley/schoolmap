@@ -9,7 +9,7 @@ use YAML qw( LoadFile );
 use LWP::UserAgent;
 use XML::Simple;
 
-my $config = LoadFile( "google.yaml" );
+my $config = LoadFile( "config/google.yaml" );
 my $url = "http://maps.google.com/maps/feeds/maps/default/full";
 
 my $auth = Net::Google::AuthSub->new(

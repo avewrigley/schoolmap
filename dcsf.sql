@@ -1,12 +1,12 @@
 DROP TABLE IF EXISTS `dcsf`;
-DROP TABLE IF EXISTS `dcfs`;
 CREATE TABLE `dcsf` (
   `pupils_primary` int(11) default NULL,
-  `dcsf_id` int(10) unsigned NOT NULL,
+  `ofsted_id` int(10) unsigned NOT NULL,
   `average_secondary` float default NULL,
   `pupils_secondary` float default NULL,
   `pupils_post16` int(11) default NULL,
   `average_post16` float default NULL,
+  `type` varchar(255) default '',
   `post16_url` varchar(255) default '',
   `secondary_url` varchar(255) default '',
   `primary_url` varchar(255) default '',
@@ -14,7 +14,7 @@ CREATE TABLE `dcsf` (
   `average_ks3` float default '0',
   `pupils_ks3` int(11) default '0',
   `average_primary` float default NULL,
-  PRIMARY KEY  (`dcsf_id`),
+  PRIMARY KEY  (`ofsted_id`),
   KEY `urls` (`secondary_url`,`primary_url`),
   KEY `urls2` (`ks3_url`,`post16_url`),
   KEY `py` (`primary_url`),

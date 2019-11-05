@@ -34,7 +34,7 @@ sub coords
     my %output = $self->find( $postcode );
     my ( $lon, $lat ) = @output{qw(lon lat)};
     # die "no lon / lat for $postcode" unless defined $lon && defined $lat;
-    return $lon && $lat ? ( $lon, $lat ) : ();
+    return $lon && $lat ? ( $lat, $lon ) : ();
 }
 
 sub find
@@ -43,7 +43,7 @@ sub find
     my $pc = shift;
     my $postcode = uc( $pc );
     $postcode =~ s/\s*//g;
-    my $sth = $self->{dbh}->prepare( "SELECT * FROM postcode WHERE code = ?" );
+    my $sth = $self->{dbh}->prepare( "SELECT * FROM postcode WHERE postcode = ?" );
     $sth->execute( $postcode );
     my $output = $sth->fetchrow_hashref;
     $sth->finish();
@@ -65,7 +65,7 @@ sub add
 
     my $postcode = uc( $pc );
     $postcode =~ s/\s*//g;
-    my $sth = $self->{dbh}->prepare( "REPLACE INTO postcode ( code, lat, lon ) VALUES ( ?,?,? )" );
+    my $sth = $self->{dbh}->prepare( "REPLACE INTO postcode ( postcode, lat, lon ) VALUES ( ?,?,? )" );
     $sth->execute( $postcode, $lat, $lon );
 }
 

@@ -4,18 +4,13 @@ use strict;
 use warnings;
 
 use Data::Dumper;
+require Geo::Coder::OpenCage;
 
-my $api_key = "ABQIAAAAzvdwQCWLlw5TXpo7sNhCSRTpDCCGWHns9m2oc9sQQ_LCUHXVlhS7v4YbLZCNgHXnaepLqcd-J0BBDw";
-use Geo::Coder::Google;
-my $geocoder = Geo::Coder::Google->new(
-    apikey => $api_key,
-    host => "maps.google.co.uk",
-);
-warn "geocoder: $geocoder\n";
-my $location = $geocoder->geocode( 
-    location => shift
-);
-die Dumper $location;
+my $api_key = "fe2b2d1377b646c4931bd791051f91d9";
+my $Geocoder = Geo::Coder::OpenCage->new(api_key => $api_key);
+my $result = $Geocoder->geocode(location => shift);
+
+die Dumper $result;
 
 #------------------------------------------------------------------------------
 #

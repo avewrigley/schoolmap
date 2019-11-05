@@ -13,7 +13,7 @@ require Geo::Coder::Google;
 use Data::Dumper;
 use YAML qw( LoadFile );
 
-my $config = LoadFile( "$Bin/google.yaml" );
+my $config = LoadFile( "$Bin/config/google.yaml" );
 open( STDERR, ">>$Bin/logs/index.log" );
 warn "$$ at ", scalar( localtime ), "\n";
 my %formdata = CGI::Lite->new->parse_form_data();
