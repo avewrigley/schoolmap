@@ -60,7 +60,7 @@ sub create_school
     die "no postcode" unless $school{postcode};
     my $postcode = $school{postcode};
     $school{postcode} = uc( $school{postcode} );
-    $school{postcode} =~ s/[^0-9A-Z]//g;
+    $school{postcode} =~ s/[^0-9 A-Z]//g;
     warn "new school: $school{name}\n";
     ( $school{lat}, $school{lon} ) = $self->get_location( \%school );
     my $isth = $self->{dbh}->prepare( <<SQL );

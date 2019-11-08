@@ -134,7 +134,7 @@ sub geo_where
 sub get_schools
 {
     my $self = shift;
-    my @what = ( "school.*" ,"dcsf.*" );
+    my @what = ( "school.*" ,"performance.*" );
     my @from = ( "school" );
     my ( $where, @args ) = $self->where;
     if ( $self->{lat} && $self->{lon} )
@@ -146,7 +146,7 @@ EOF
         unshift( @args, $self->{lat}, $self->{lat}, $self->{lon} );
     }
     my $what = join( ",", @what );
-    my %join = ( "dcsf" => "ON school.ofsted_id = dcsf.ofsted_id" );
+    my %join = ( "performance" => "ON school.ofsted_id = performance.ofsted_id" );
     my $from = join( ",", @from );
     my $join = join( " ", map "LEFT JOIN $_ $join{$_}", keys %join );
     my $sql = <<EOF;

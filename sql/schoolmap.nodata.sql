@@ -16,28 +16,13 @@
 /*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
 
 --
--- Table structure for table `acronym`
+-- Table structure for table `performance`
 --
 
-DROP TABLE IF EXISTS `acronym`;
+DROP TABLE IF EXISTS `performance`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
-CREATE TABLE `acronym` (
-  `acronym` varchar(255) NOT NULL,
-  `dcsf_id` int(10) unsigned NOT NULL,
-  `type` varchar(255) NOT NULL,
-  PRIMARY KEY (`acronym`,`dcsf_id`,`type`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Table structure for table `dcsf`
---
-
-DROP TABLE IF EXISTS `dcsf`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!50503 SET character_set_client = utf8mb4 */;
-CREATE TABLE `dcsf` (
+CREATE TABLE `performance` (
   `pupils_primary` int(11) default NULL,
   `ofsted_id` int(10) unsigned NOT NULL,
   `average_secondary` float default NULL,
@@ -69,35 +54,6 @@ CREATE TABLE `dcsf` (
 -- Table structure for table `ofsted`
 --
 
-DROP TABLE IF EXISTS `ofsted`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!50503 SET character_set_client = utf8mb4 */;
-CREATE TABLE `ofsted` (
-  `type` varchar(255) NOT NULL,
-  `ofsted_id` int(10) unsigned NOT NULL,
-  `ofsted_url` varchar(255) NOT NULL DEFAULT '',
-  PRIMARY KEY (`ofsted_id`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Table structure for table `ofsted_dcsf`
---
-
-DROP TABLE IF EXISTS `ofsted_dcsf`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!50503 SET character_set_client = utf8mb4 */;
-CREATE TABLE `ofsted_dcsf` (
-  `dcsf_id` int(10) unsigned NOT NULL,
-  `ofsted_id` int(10) unsigned NOT NULL,
-  PRIMARY KEY (`ofsted_id`,`dcsf_id`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Table structure for table `school`
---
-
 DROP TABLE IF EXISTS `postcode`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
@@ -123,15 +79,13 @@ CREATE TABLE `school` (
   `type` varchar(255) NOT NULL,
   `phase` varchar(255) NOT NULL,
   `ofsted_url` varchar(255) NOT NULL DEFAULT '',
-  `ofsted_id` int(10) unsigned DEFAULT NULL,
-  `dcsf_id` int(10) unsigned DEFAULT NULL,
-  PRIMARY KEY (`postcode`,`name`),
+  `ofsted_id` int(10) unsigned NOT NULL,
+  PRIMARY KEY (`ofsted_id`),
   KEY `lon` (`lon`),
+  KEY `phase` (`phase`),
   KEY `lat` (`lat`),
   KEY `lon_lat` (`lon`,`lat`),
-  KEY `ofsted_id` (`ofsted_id`),
-  KEY `name` (`name`),
-  KEY `dcsf_id` (`dcsf_id`)
+  KEY `name` (`name`)
 ) ENGINE=MyISAM AUTO_INCREMENT=108604 DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
