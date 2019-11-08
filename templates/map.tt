@@ -10,6 +10,6 @@
         <td class="half" id="list"></td>
     </tr>
 </table>
-<script>
+<script type="text/javascript">
     SCHOOLMAP.initMap();
 </script>

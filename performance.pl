@@ -53,11 +53,10 @@ my $csv = Text::CSV->new ( { binary => 1 } ) or die "Cannot use CSV: ".Text::CSV
 open my $fh, "<:encoding(utf8)", $csvfile or die "$csvfile: $!";
 my $insert_sql = <<EOF;
 REPLACE INTO performance (
-    type,
     average_secondary,
     pupils_secondary,
     ofsted_id
-) VALUES(?,?,?,?)
+) VALUES(?,?,?)
 EOF
 my $isth = $dbh->prepare( $insert_sql );
 my $header = $csv->getline( $fh );
@@ -69,8 +68,7 @@ while ( my $row = $csv->getline( $fh ) )
     next unless defined($row{URN}) and length($row{URN});
     my @row = map {looks_like_number($_) ? $_ : 0.0} @row{qw( ATT8SCR TPUP URN )};
     warn Dumper(\@row);
-    $isth->execute( "secondary", @row );
+    $isth->execute( @row );
 
 }
-warn "$0 ($$) finished\n";
 warn "$0 ($$) finished\n";

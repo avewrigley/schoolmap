@@ -23,10 +23,10 @@ var SCHOOLMAP = {
     params:{},
     nschools:0,
     order_bys:{ 
-        "primary":"Key stage 2",
-        "ks3":"Key stage 3",
-        "secondary":"GCSE",
-        "post16":"GCE and VCE" 
+        "primary": { "description": "Key stage 2" },
+        "ks3": { "description": "Key stage 3" },
+        "secondary": { "description": "GCSE", "tooltip": "Average Attainment 8 score per pupil" },
+        "post16": { "description": "GCE and VCE" },
     },
     request:false,
     curtags:[ "body", "a", "input", "select", "div" ],
@@ -551,7 +551,7 @@ SCHOOLMAP.createInfoWindow = function( school )
         if ( url )
         {
             var ave = "average_" + order_by;
-            var text = SCHOOLMAP.order_bys[order_by] + " (" + school[ave] + ")";
+            var text = SCHOOLMAP.order_bys[order_by].description + " (" + school[ave] + ")";
             html = html + SCHOOLMAP.addLink( url, text );
         }
     }
@@ -609,8 +609,9 @@ SCHOOLMAP.initTableHead = function( tr, order_bys )
     for ( var i = 0; i < order_bys.length; i++ )
     {
         var order_by = order_bys[i];
-        var description = SCHOOLMAP.order_bys[order_by];
-        SCHOOLMAP.createHeadCell( tr, description, "Average Score" );
+        var description = SCHOOLMAP.order_bys[order_by].description;
+        var tooltip = SCHOOLMAP.order_bys[order_by].tooltip;
+        SCHOOLMAP.createHeadCell( tr, description, tooltip );
     }
     if ( SCHOOLMAP.point )
     {
@@ -766,7 +767,7 @@ SCHOOLMAP.getOrderBys = function()
     for ( var order_by in order_bys_hash )
     {
         order_bys_array.push( order_by );
-        var description = SCHOOLMAP.order_bys[order_by];
+        var description = SCHOOLMAP.order_bys[order_by].description;
         SCHOOLMAP.addOpt( sel, { val: order_by, str: description } );
     }
     sel.value = val;
