@@ -8,6 +8,7 @@ use HTML::Entities qw( encode_entities );
 use Template;
 use Data::Dumper;
 use JSON;
+use FindBin qw( $Bin );
 
 sub new
 {
@@ -16,7 +17,7 @@ sub new
     require DBI;
     # $self->{debug} = 1;
     $self->{dbh} = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
-    $self->{tt} = Template->new( { INCLUDE_PATH => "/var/www/www.schoolmap.org.uk/templates" } );
+    $self->{tt} = Template->new( INCLUDE_PATH => "$Bin/templates" );
     return $self;
 }
 
@@ -34,13 +35,13 @@ sub json
 {
     my $self = shift;
     my $schools = $self->get_schools();
-    print to_json( $schools );
+    return to_json( $schools );
 }
 
 sub phases
 {
     my $self = shift;
-    print to_json( $self->get_phases );
+    return to_json( $self->get_phases );
 }
 
 sub get_phases
@@ -77,7 +78,9 @@ sub xml
     my $self = shift;
     my $schools = $self->get_schools();
     $self->{format} ||= "xml";
-    $self->process_template( "school.$self->{format}", $schools );
+    my $content = '';
+    $self->process_template( "school.$self->{format}", $schools, \$content );
+    return $content;
 }
 
 sub where
