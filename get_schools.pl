@@ -1,4 +1,4 @@
-#!/usr/bin/perl
+#!/usr/bin/env perl
 #set filetype=perl
 
 #------------------------------------------------------------------------------
@@ -82,17 +82,17 @@ if ( $opts{pidfile} )
 {
     $pp = Proc::Pidfile->new( silent => $opts{silent} );
 }
-my $config = LoadFile( "$Bin/config/schoolmap.yaml" );
-my $csvurl = $config->{schools_url};
-my $csvfile = "$Bin/downloads/schools.csv";
 my $logfile = "$Bin/logs/get_schools.log";
-getstore( $csvurl, $csvfile );
-$dbh = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
-$sc = CreateSchool->new( dbh => $dbh );
 unless ( $opts{verbose} )
 {
     open( STDERR, ">$logfile" ) or die "can't write to $logfile\n";
 }
+my $config = LoadFile( "$Bin/config/schoolmap.yaml" );
+my $csvurl = $config->{schools_url};
+my $csvfile = "$Bin/downloads/schools.csv";
+my $code = getstore( $csvurl, $csvfile );
+$dbh = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
+$sc = CreateSchool->new( dbh => $dbh );
 my $csv = Text::CSV->new ( { binary => 1 } ) or die "Cannot use CSV: ".Text::CSV->error_diag ();
 # open my $fh, "<:encoding(utf8)", $csvfile or die "$csvfile: $!";
 open my $fh, "<", $csvfile or die "$csvfile: $!";
