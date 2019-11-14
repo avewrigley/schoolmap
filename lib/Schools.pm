@@ -10,6 +10,13 @@ use Data::Dumper;
 use JSON;
 use FindBin qw( $Bin );
 
+my %format2content_type = (
+    "kml" => "application/vnd.google-earth.kml+xml",
+    "json" => "application/json",
+    "georss" => "application/rss+xml+geo",
+    "xml" => "application/xml",
+);
+
 sub new
 {
     my $class = shift;
@@ -21,27 +28,30 @@ sub new
     return $self;
 }
 
-sub process_template
+sub render_as
 {
     my $self = shift;
-    my $template = shift;
-    my $params = shift;
-    $self->{tt}->process( $template, $params ) || croak $self->{tt}->error;
-    return unless $self->{debug};
-    $self->{tt}->process( $template, $params, \*STDERR );
-}
+    my $format = shift;
 
-sub json
-{
-    my $self = shift;
     my $schools = $self->get_schools();
-    return to_json( $schools );
+    my $content_type = $format2content_type{$format};
+    my $content = '';
+    if ( $format eq 'json' )
+    {
+        $content = to_json( $schools );
+    }
+    else
+    {
+        $self->{tt}->process( "school.$self->{format}", $schools, \$content ) || croak $self->{tt}->error;
+    }
+    return ( $content, $content_type );
 }
 
 sub phases
 {
     my $self = shift;
-    return to_json( $self->get_phases );
+    my $content_type = format2content_type{"json"};
+    return ( to_json( $self->get_phases ), $content_type );
 }
 
 sub get_phases
@@ -71,16 +81,6 @@ sub get_order_bys
         { val => "secondary", str => "GCSE results" },
         { val => "post16", str => "GCE and VCE results" },
     ];
-}
-
-sub xml
-{
-    my $self = shift;
-    my $schools = $self->get_schools();
-    $self->{format} ||= "xml";
-    my $content = '';
-    $self->process_template( "school.$self->{format}", $schools, \$content );
-    return $content;
 }
 
 sub where

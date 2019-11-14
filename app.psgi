@@ -17,10 +17,8 @@ sub get_schools_page
     my $parameters = shift;
 
     my $config = LoadFile( "$Bin/config/google.yaml" );
-    warn "$$ at ", scalar( localtime ), "\n";
     print "Content-Type: text/html\n\n";
     my $schools = Schools->new( %{$parameters} );
-    warn "get school phases\n";
     $parameters->{phases} = $schools->get_phases;
     $parameters->{order_bys} = $schools->get_order_bys;
     my $template_file = 'index.tt';
@@ -39,43 +37,31 @@ sub {
     my $content_type = "text/html";
     my $path = $req->path_info;
     my $parameters = $req->parameters;
-    warn "path = $path\n";
     my $content = '';
-    warn Dumper $parameters;
     if ( $path eq "/" || $path eq "/index.cgi" )
     {
         my $body = get_schools_page( $parameters );
         $content = "<body>$body</body>";
     }
-    elsif ( $path eq '/schools.cgi' )
+    elsif ( $path eq '/schools' )
     {
 
         my %parameters = ( format => "json", %$parameters );
+        my $schools = Schools->new( %parameters );
         if ( exists $parameters{phases} )
         {
-            $content_type = "application/json";
-            $content = Schools->new( %parameters )->phases();
+            ( $content, $content_type ) = $schools->phases();
         }
         else
         {
-            if ( $parameters{format} eq 'json' )
-            {
-                $content_type = "application/json";
-                $content = Schools->new( %parameters )->json();
-            }
-            else
-            {
-                $content = Schools->new( %parameters )->xml();
-                $content_type = "text/xml";
-            }
+            ( $content, $content_type ) = $schools->render_as( $parameters{format} );
         }
     }
     else
     {
-        my $file_path = "$Bin$path";
+        my $file_path = "$Bin/docroot$path";
         my $mm = new File::MMagic;
         $content_type = $mm->checktype_filename( $file_path );
-        warn "content_type = $content_type\n";
         $content = read_file( $file_path );
     }
     # open( STDERR, ">>$Bin/logs/index.log" );
