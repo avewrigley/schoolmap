@@ -72,7 +72,7 @@ SCHOOLMAP.findAddress = function( query, callback )
                 var point = new google.maps.LatLng( lat, lng );
                 console.log( result );
                 console.log( title );
-                SCHOOLMAP.updateAddress( point, query );
+                SCHOOLMAP.updateAddress( point, title );
                 callback( point );
             }
         }
