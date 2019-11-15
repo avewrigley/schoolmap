@@ -506,8 +506,13 @@ SCHOOLMAP.calculateDistance = function( school_no )
         return;
     }
     var school = SCHOOLMAP.schools[school_no];
-    console.log("calculate distance for " + school.name );
+    if ( ! school ) 
+    {
+        console.log( "stale distance request" )
+        return;
+    }
     try {
+        console.log( "calculate distance for " + school.name );
         SCHOOLMAP.distance_service.getDistanceMatrix( {
                 origins: [school.latlng],
                 destinations: [SCHOOLMAP.point],
