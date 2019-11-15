@@ -261,14 +261,18 @@ SCHOOLMAP.setCursor = function( state )
 SCHOOLMAP.getQueryString = function() 
 {
     var bounds = SCHOOLMAP.map.getBounds();
-    var sw = bounds.getSouthWest();
-    var ne = bounds.getNorthEast();
-    var query_string = 
-        "&minLon=" + escape( sw.lng() ) + 
-        "&maxLon=" + escape( ne.lng() ) + 
-        "&minLat=" + escape( sw.lat() ) + 
-        "&maxLat=" + escape( ne.lat() )
-    ;
+    query_string = '';
+    if ( bounds )
+    {
+        var sw = bounds.getSouthWest();
+        var ne = bounds.getNorthEast();
+        var query_string = query_string +
+            "&minLon=" + escape( sw.lng() ) + 
+            "&maxLon=" + escape( ne.lng() ) + 
+            "&minLat=" + escape( sw.lat() ) + 
+            "&maxLat=" + escape( ne.lat() )
+        ;
+    }
     if ( SCHOOLMAP.point ) 
     {
         query_string = query_string + "&lon=" + escape( SCHOOLMAP.point.lng() ) + "&lat=" + escape( SCHOOLMAP.point.lat() );
