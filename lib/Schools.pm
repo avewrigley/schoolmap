@@ -60,21 +60,16 @@ sub render_as
     return ( $content, $content_type );
 }
 
-sub phases
-{
-    my $self = shift;
-    my $content_type = format2content_type{"json"};
-    return ( to_json( $self->get_phases ), $content_type );
-}
-
 sub get_phases
 {
     my $self = shift;
-    my ( $where, $from, @args ) = $self->_geo_where();
+    my ( $geo_where, $geo_args ) = $self->_geo_where();
+    return [] unless @$geo_where;
+    my $where = "WHERE " . join( " AND ", @$geo_where );
     my @phases = ( "all" );
-    my $sql = "SELECT DISTINCT phase FROM $from $where";
+    my $sql = "SELECT DISTINCT phase FROM school $where";
     my $sth = $self->{dbh}->prepare( $sql );
-    $sth->execute( @args );
+    $sth->execute( @$geo_args );
     while ( my ( $phase ) = $sth->fetchrow )
     {
         push( @phases, $phase );
@@ -98,20 +93,15 @@ sub get_order_bys
 sub _where
 {
     my $self = shift;
-    my @args;
-    my @where = ( );
-    if ( $self->{parameters}{minLon} && $self->{parameters}{maxLon} && $self->{parameters}{minLat} && $self->{parameters}{maxLat} )
+
+    my @args = ();
+    my @where = ();
+
+    my ( $geo_where, $geo_args ) = $self->_geo_where();
+    if ( @$geo_where )
     {
-        push( 
-            @where,
-            (
-                "school.lon > ?",
-                "school.lon < ?",
-                "school.lat > ?",
-                "school.lat < ?",
-            )
-        );
-        push( @args, $self->{parameters}{minLon}, $self->{parameters}{maxLon}, $self->{parameters}{minLat}, $self->{parameters}{maxLat} );
+        push( @where, @$geo_where );
+        push( @args, @$geo_args );
     }
     if ( my $school_phase = $self->{parameters}{phase} )
     {
@@ -129,16 +119,10 @@ sub _where
 sub _geo_where
 {
     my $self = shift;
-    return ( "", "school" ) unless $self->{parameters}{minLon} && $self->{parameters}{maxLon} && $self->{parameters}{minLat} && $self->{parameters}{maxLat};
-    my @where = (
-        "school.lon > ?",
-        "school.lon < ?",
-        "school.lat > ?",
-        "school.lat < ?",
-    );
+    return ( [], [] ) unless $self->{parameters}{minLon} && $self->{parameters}{maxLon} && $self->{parameters}{minLat} && $self->{parameters}{maxLat};
+    my @where = ( "school.lon > ?", "school.lon < ?", "school.lat > ?", "school.lat < ?" );
     my @args = ( $self->{parameters}{minLon}, $self->{parameters}{maxLon}, $self->{parameters}{minLat}, $self->{parameters}{maxLat} );
-    my $where = "WHERE " . join( " AND ", @where );
-    return ( $where, "school", @args );
+    return ( \@where, \@args );
 }
 
 sub _get_schools
@@ -189,7 +173,8 @@ EOF
     $sth = $self->{dbh}->prepare( "SELECT FOUND_ROWS();" );
     $sth->execute();
     my ( $nschools ) = $sth->fetchrow();
-    return { nschools => $nschools, schools => \@schools };
+    my $phases = $self->get_phases();
+    return { nschools => $nschools, schools => \@schools, phases => $phases };
 }
 
 sub _get_location

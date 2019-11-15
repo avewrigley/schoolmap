@@ -308,9 +308,8 @@ SCHOOLMAP.getSchools = function()
     SCHOOLMAP.getJSON( url, SCHOOLMAP.getSchoolsCallback );
 };
 
-SCHOOLMAP.phasesCallback = function( response ) 
+SCHOOLMAP.updatePhasesSelector = function( phases ) 
 {
-    var phases = JSON.parse( response.responseText );
     var sel = document.forms[0].phase;
     var val = sel.value;
     SCHOOLMAP.removeChildren( sel );
@@ -337,6 +336,7 @@ SCHOOLMAP.schoolsChanged = function( schools )
 SCHOOLMAP.getSchoolsCallback = function( response ) 
 {
     var json = JSON.parse( response.responseText );
+    SCHOOLMAP.updatePhasesSelector( json.phases );
     if ( SCHOOLMAP.schoolsChanged( json.schools ) )
     {
         console.log( "schools changed" );
@@ -706,8 +706,6 @@ SCHOOLMAP.initMap = function()
                 SCHOOLMAP.map.setCenter( point );
                 SCHOOLMAP.map.setZoom( zoom );
                 var query_string = SCHOOLMAP.getQueryString();
-                var phases_url = SCHOOLMAP.schools_url + "?" + query_string + "&phases";
-                SCHOOLMAP.get( phases_url, SCHOOLMAP.phasesCallback );
                 SCHOOLMAP.setMapListeners();
                 SCHOOLMAP.getSchools();
             }

@@ -50,14 +50,7 @@ sub {
     elsif ( $path eq '/schools' )
     {
         my %parameters = ( format => "json", %$parameters );
-        if ( exists $parameters{phases} )
-        {
-            ( $content, $content_type ) = $schools->phases();
-        }
-        else
-        {
-            ( $content, $content_type ) = $schools->render_as( $parameters{format} );
-        }
+        ( $content, $content_type ) = $schools->render_as( $parameters{format} );
     }
     else
     {
