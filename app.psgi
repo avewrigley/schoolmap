@@ -12,13 +12,16 @@ require Schools;
 use strict;
 use warnings;
 
+my $config_file = "$Bin/config/schoolmap.yaml";
+my $template_dir = "$Bin/templates";
+
 sub get_schools_page
 {
+    my $schools = shift;
     my $parameters = shift;
 
     my $config = LoadFile( "$Bin/config/google.yaml" );
     print "Content-Type: text/html\n\n";
-    my $schools = Schools->new( %{$parameters} );
     $parameters->{phases} = $schools->get_phases;
     $parameters->{order_bys} = $schools->get_order_bys;
     my $template_file = 'index.tt';
@@ -37,17 +40,16 @@ sub {
     my $content_type = "text/html";
     my $path = $req->path_info;
     my $parameters = $req->parameters;
+    my $schools = Schools->new( config_file => $config_file, template_dir => $template_dir, parameters => $parameters );
     my $content = '';
     if ( $path eq "/" || $path eq "/index.cgi" )
     {
-        my $body = get_schools_page( $parameters );
+        my $body = get_schools_page( $schools, $parameters );
         $content = "<body>$body</body>";
     }
     elsif ( $path eq '/schools' )
     {
-
         my %parameters = ( format => "json", %$parameters );
-        my $schools = Schools->new( %parameters );
         if ( exists $parameters{phases} )
         {
             ( $content, $content_type ) = $schools->phases();

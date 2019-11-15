@@ -9,6 +9,11 @@ use Template;
 use Data::Dumper;
 use JSON;
 use FindBin qw( $Bin );
+use File::Slurp;
+require Geo::Postcode;
+require Geo::Coder::OpenCage;
+require DBI;
+use YAML qw( LoadFile );
 
 my %format2content_type = (
     "kml" => "application/vnd.google-earth.kml+xml",
@@ -17,14 +22,22 @@ my %format2content_type = (
     "xml" => "application/xml",
 );
 
+my @required = qw( config_file template_dir );
+
 sub new
 {
     my $class = shift;
     my $self = bless { @_ }, $class;
-    require DBI;
+    for my $key ( @required )
+    {
+        die "required arg $key not provided\n" unless exists $self->{$key};
+    }
     # $self->{debug} = 1;
+    $self->{config} = LoadFile( $self->{config_file} );
+    $self->{tt} = Template->new( INCLUDE_PATH => $self->{template_dir} );
+    $self->{geopostcode} = Geo::Postcode->new( );
+    $self->{geocoder} = Geo::Coder::OpenCage->new( api_key => $self->{config}{open_cage_api_key} );
     $self->{dbh} = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
-    $self->{tt} = Template->new( INCLUDE_PATH => "$Bin/templates" );
     return $self;
 }
 
@@ -33,7 +46,7 @@ sub render_as
     my $self = shift;
     my $format = shift;
 
-    my $schools = $self->get_schools();
+    my $schools = $self->_get_schools();
     my $content_type = $format2content_type{$format};
     my $content = '';
     if ( $format eq 'json' )
@@ -42,7 +55,7 @@ sub render_as
     }
     else
     {
-        $self->{tt}->process( "school.$self->{format}", $schools, \$content ) || croak $self->{tt}->error;
+        $self->{tt}->process( "school.$self->{parameters}{format}", $schools, \$content ) || croak $self->{tt}->error;
     }
     return ( $content, $content_type );
 }
@@ -57,10 +70,9 @@ sub phases
 sub get_phases
 {
     my $self = shift;
-    my ( $where, $from, @args ) = $self->geo_where();
+    my ( $where, $from, @args ) = $self->_geo_where();
     my @phases = ( "all" );
     my $sql = "SELECT DISTINCT phase FROM $from $where";
-    warn "$sql\n";
     my $sth = $self->{dbh}->prepare( $sql );
     $sth->execute( @args );
     while ( my ( $phase ) = $sth->fetchrow )
@@ -83,12 +95,12 @@ sub get_order_bys
     ];
 }
 
-sub where
+sub _where
 {
     my $self = shift;
     my @args;
     my @where = ( );
-    if ( $self->{minLon} && $self->{maxLon} && $self->{minLat} && $self->{maxLat} )
+    if ( $self->{parameters}{minLon} && $self->{parameters}{maxLon} && $self->{parameters}{minLat} && $self->{parameters}{maxLat} )
     {
         push( 
             @where,
@@ -99,9 +111,9 @@ sub where
                 "school.lat < ?",
             )
         );
-        push( @args, $self->{minLon}, $self->{maxLon}, $self->{minLat}, $self->{maxLat} );
+        push( @args, $self->{parameters}{minLon}, $self->{parameters}{maxLon}, $self->{parameters}{minLat}, $self->{parameters}{maxLat} );
     }
-    if ( my $school_phase = $self->{phase} )
+    if ( my $school_phase = $self->{parameters}{phase} )
     {
         push( @where, "school.phase = ?" );
         push( @args, $school_phase );
@@ -110,43 +122,38 @@ sub where
     {
         push( @where, "school.phase IS NOT NULL" );
     }
-    if ( $self->{find_school} )
-    {
-        push( @where, 'school.name LIKE ?' );
-        push( @args, "%" . $self->{find_school} ."%" );
-    }
     my $where = @where ? "WHERE " . join( " AND ", @where ) : '';
     return ( $where, @args );
 }
 
-sub geo_where
+sub _geo_where
 {
     my $self = shift;
-    return ( "", "school" ) unless $self->{minLon} && $self->{maxLon} && $self->{minLat} && $self->{maxLat};
+    return ( "", "school" ) unless $self->{parameters}{minLon} && $self->{parameters}{maxLon} && $self->{parameters}{minLat} && $self->{parameters}{maxLat};
     my @where = (
         "school.lon > ?",
         "school.lon < ?",
         "school.lat > ?",
         "school.lat < ?",
     );
-    my @args = ( $self->{minLon}, $self->{maxLon}, $self->{minLat}, $self->{maxLat} );
+    my @args = ( $self->{parameters}{minLon}, $self->{parameters}{maxLon}, $self->{parameters}{minLat}, $self->{parameters}{maxLat} );
     my $where = "WHERE " . join( " AND ", @where );
     return ( $where, "school", @args );
 }
 
-sub get_schools
+sub _get_schools
 {
     my $self = shift;
     my @what = ( "school.*" ,"performance.*" );
     my @from = ( "school" );
-    my ( $where, @args ) = $self->where;
-    if ( $self->{lat} && $self->{lon} )
+    my ( $where, @args ) = $self->_where;
+    if ( $self->{parameters}{lat} && $self->{parameters}{lon} )
     {
         my $distance_sql = <<EOF;
 (((acos(sin((?*pi()/180)) * sin((lat*pi()/180))+cos((?*pi()/180)) * cos((lat*pi()/180)) * cos(((?-lon)*pi()/180))))*180/pi())*60*1.1515*1.609344) as distance
 EOF
         push( @what, $distance_sql );
-        unshift( @args, $self->{lat}, $self->{lat}, $self->{lon} );
+        unshift( @args, $self->{parameters}{lat}, $self->{parameters}{lat}, $self->{parameters}{lon} );
     }
     my $what = join( ",", @what );
     my %join = ( "performance" => "ON school.ofsted_id = performance.ofsted_id" );
@@ -156,23 +163,21 @@ EOF
 SELECT SQL_CALC_FOUND_ROWS $what FROM $from $join
     $where
 EOF
-    if ( $self->{order_by} )
+    if ( $self->{parameters}{order_by} )
     {
-        if ( $self->{order_by} eq 'distance' )
+        if ( $self->{parameters}{order_by} eq 'distance' )
         {
             $sql .= " ORDER BY distance";
         }
         else
         {
-            $sql .= " ORDER BY average_$self->{order_by} DESC";
+            $sql .= " ORDER BY average_$self->{parameters}{order_by} DESC";
         }
     }
-    if ( defined $self->{limit} )
+    if ( defined $self->{parameters}{limit} )
     {
-        $sql .= " LIMIT $self->{limit}";
+        $sql .= " LIMIT $self->{parameters}{limit}";
     }
-    warn "$sql\n";
-    warn "ARGS: @args\n";
     my $sth = $self->{dbh}->prepare( $sql );
     $sth->execute( @args );
     my @schools;
@@ -184,8 +189,64 @@ EOF
     $sth = $self->{dbh}->prepare( "SELECT FOUND_ROWS();" );
     $sth->execute();
     my ( $nschools ) = $sth->fetchrow();
-    warn "NROWS: $nschools\n";
     return { nschools => $nschools, schools => \@schools };
+}
+
+sub _get_location
+{
+    my $self = shift;
+    my $school = shift;
+    my %opts = @_;
+
+    if ( $school->{lat} && $school->{lon} )
+    {
+        return( $school->{lat}, $school->{lon} );
+    }
+    my @coords = $self->{geopostcode}->coords( $school->{postcode} );
+    return @coords if @coords == 2 && $coords[0] && $coords[1];
+    my $response = $self->{geocoder}->geocode( location => $school->{postcode} );
+    my @results = @{$response->{results}};
+    my $location = $results[0]{geometry};
+    if ( $location )
+    {
+        $self->{geopostcode}->add( $school->{postcode}, $location->{lat}, $location->{lng} );
+        return ( $location->{lat}, $location->{lng} );
+    }
+    else
+    {
+        warn "failed to get location for $school->{postcode}\n";
+    }
+    die "no lat / lon\n";
+}
+
+sub get_school
+{
+    my $self = shift;
+    my $ofsted_id = shift;
+    my $sth = $self->{dbh}->prepare( <<SQL );
+SELECT * FROM school WHERE ofsted_id = ?
+SQL
+    $sth->execute( $ofsted_id );
+    my $school = $sth->fetchrow_hashref;
+    return $school;
+}
+
+sub create_school
+{
+    my $self = shift;
+    my %school = @_;
+
+    die "no ofsted_id" unless $school{ofsted_id};
+    die "no name" unless $school{name};
+    die "no postcode" unless $school{postcode};
+    my $postcode = $school{postcode};
+    $school{postcode} = uc( $school{postcode} );
+    $school{postcode} =~ s/[^0-9 A-Z]//g;
+    ( $school{lat}, $school{lon} ) = $self->_get_location( \%school );
+    my $isth = $self->{dbh}->prepare( <<SQL );
+REPLACE INTO school ( ofsted_id, ofsted_url, name, type, phase, postcode, address, lat, lon ) VALUES ( ?,?,?,?,?,?,?,?,? )
+SQL
+    $isth->execute( @school{qw( ofsted_id url name type phase postcode address lat lon )} );
 }
 
 1;

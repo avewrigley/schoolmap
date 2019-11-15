@@ -1,4 +1,4 @@
-#!/usr/bin/perl
+#!/usr/bin/env perl
 #set filetype=perl
 
 #------------------------------------------------------------------------------
@@ -19,22 +19,29 @@ use YAML qw( LoadFile );
 use Pod::Usage;
 use Getopt::Long;
 use Proc::Pidfile;
-use DBI;
 use Data::Dumper;
-use lib "$Bin/lib";
-require CreateSchool;
+use lib "$Bin/../lib";
+require Schools;
+
+my $csv_file = "$Bin/../downloads/independent_schools.csv";
+my $log_file = "$Bin/../logs/get_independent_schools.log";
+my $config_file = "$Bin/../config/schoolmap.yaml";
+my $template_dir = "$Bin/../templates";
+
+my $school_no = 0;
+my $failed = 0;
+my $success = 0;
 
 my %opts;
 my @opts = qw( force! silent pidfile! verbose phase=s );
 
-my ( $dbh, $sc );
+my $sc;
 
 sub get_address
 {
     my $url = shift;
 
     my $mech = WWW::Mechanize->new();
-    warn "GET $url\n";
     my $resp = $mech->get( $url );
     my $html = $mech->content();
     die "no HTML\n" unless $html;
@@ -46,8 +53,8 @@ sub update_school
 {
     my %school = @_;
 
-    warn "$school{name} ($school{type} - $school{phase})\n";
     return if $opts{phase} && $school{phase} ne $opts{phase};
+    ++$school_no;
     eval {
         die "no type\n" unless $school{type};
         die "no url\n" unless $school{url};
@@ -58,17 +65,18 @@ sub update_school
         }
         if ( ! $school{address} ) {
             $school{address} = get_address( $school{url} );
-            print Dumper( \%school );
         }
         $sc->create_school( %school );
     };
     if ( $@ )
     {
-        die "$school{url} FAILED: $@\n";
+        warn "$school_no: $school{url} FAILED: $@\n";
+        $failed++;
     }
     else
     {
-        warn "$school{url} SUCCESS\n";
+        warn "$school_no: $school{url} SUCCESS\n";
+        $success++;
     }
 }
 
@@ -82,20 +90,17 @@ if ( $opts{pidfile} )
 {
     $pp = Proc::Pidfile->new( silent => $opts{silent} );
 }
-my $config = LoadFile( "$Bin/config/schoolmap.yaml" );
+my $config = LoadFile( $config_file );
 my $csvurl = $config->{independent_schools_url};
-my $csvfile = "$Bin/downloads/independent_schools.csv";
-my $logfile = "$Bin/logs/get_independent_schools.log";
-getstore( $csvurl, $csvfile );
-$dbh = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
-$sc = CreateSchool->new( dbh => $dbh );
+getstore( $csvurl, $csv_file );
+$sc = Schools->new( config_file => $config_file, template_dir => $template_dir );
 unless ( $opts{verbose} )
 {
-    open( STDERR, ">$logfile" ) or die "can't write to $logfile\n";
+    open( STDERR, ">$log_file" ) or die "can't write to $log_file\n";
 }
 my $csv = Text::CSV->new ( { binary => 1 } ) or die "Cannot use CSV: ".Text::CSV->error_diag ();
-# open my $fh, "<:encoding(utf8)", $csvfile or die "$csvfile: $!";
-open my $fh, "<", $csvfile or die "$csvfile: $!";
+# open my $fh, "<:encoding(utf8)", $csv_file or die "$csv_file $!";
+open my $fh, "<", $csv_file or die "$csv_file $!";
 my $title = $csv->getline( $fh );
 my $blank = $csv->getline( $fh );
 my $header = $csv->getline( $fh );
@@ -113,6 +118,5 @@ while ( my $row = $csv->getline( $fh ) )
         postcode => $row{"Postcode"},
     );
     update_school( %school );
-    warn ++$i;
 }
-warn "$0 ($$) finished\n";
+warn "$0 ($$) finished - $school_no schools, $success success, $failed failed\n";
