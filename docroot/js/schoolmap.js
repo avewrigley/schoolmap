@@ -21,7 +21,7 @@ var SCHOOLMAP = {
     schools:[],
     params:{},
     nschools:0,
-    keystages:{ 
+    keystages: { 
         "ks2": { "description": "Cohort level key stage 1 average points score" },
         "ks4": { "description": "Average Attainment 8 score per pupil" },
         "ks5": { "description": "Average point score per A level entry" },
@@ -548,8 +548,14 @@ SCHOOLMAP.createInfoWindow = function( school )
     {
         html = html + SCHOOLMAP.addLink( school.ofsted_url, "Ofsted report" );
     }
-    var text = SCHOOLMAP.keystages[school.keystage].description + " (" + school.average_performance + ")";
-    html = html + "<P>" + text + "</P>";
+    for ( keystage in SCHOOLMAP.keystages )
+    {
+        if ( school[keystage] )
+        {
+            var text = SCHOOLMAP.keystages[keystage].description + " (" + school[keystage] + ")";
+            html = html + "<P>" + text + "</P>";
+        }
+    }
     return html;
 };
 

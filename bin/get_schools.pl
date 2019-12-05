@@ -37,14 +37,13 @@ my ( $dbh, $sc );
 
 sub get_address
 {
-    my $url = shift;
-
-    my $mech = WWW::Mechanize->new();
-    my $resp = $mech->get( $url );
-    my $html = $mech->content();
-    die "no HTML\n" unless $html;
-    my @address = grep /\w/, map decode_entities( $_ ), $html =~ m{<address.*?>(.*?)</address>}gsim;
-    return join( ",", @address );
+    my $row = shift;
+    my $address = $row->{Street};
+    for my $f ( qw( Locality Address3 Town County ) )
+    {
+        $address = "$address, $row->{$f}" if $row->{$f};
+    }
+    return $address;
 }
 
 sub update_school
@@ -60,9 +59,6 @@ sub update_school
         if ( $school )
         {
             %school = ( %$school, %school );
-        }
-        if ( ! $school{address} ) {
-            $school{address} = get_address( $school{url} );
         }
         $sc->create_school( %school );
     };
@@ -93,8 +89,11 @@ unless ( $opts{verbose} )
     open( STDERR, ">$log_file" ) or die "can't write to $log_file\n";
 }
 my $config = LoadFile( $config_file );
-my $csvurl = $config->{schools_url};
-my $code = getstore( $csvurl, $csv_file );
+if ( ! -e $csv_file )
+{
+    my $csvurl = $config->{schools_url};
+    my $code = getstore( $csvurl, $csv_file );
+}
 $sc = Schools->new( config_file => $config_file, template_dir => $template_dir );
 my $csv = Text::CSV->new ( { binary => 1 } ) or die "Cannot use CSV: ".Text::CSV->error_diag ();
 # open my $fh, "<:encoding(utf8)", $csv_file or die "$csv_file $!";
@@ -105,13 +104,15 @@ while ( my $row = $csv->getline( $fh ) )
     my %row;
     @row{@$header} = @$row;
     my %school = ( 
-        name => $row{"School name"},
+        name => $row{"EstablishmentName"},
         ofsted_id => $row{"URN"},
-        url => $row{"Web Link"},
-        type => $row{"Type of education"},
-        phase => $row{"Phase of education"},
+        url => "http://www.ofsted.gov.uk/inspection-reports/find-inspection-report/provider/ELS/" . $row{"URN"},
+        type => $row{"TypeOfEstablishment (name)"},
+        phase => $row{"PhaseOfEducation (name)"},
+        address => get_address( \%row ),
         postcode => $row{"Postcode"},
     );
+    print Dumper( \%school );
     update_school( %school );
 }
 warn "$0 ($$) finished - $school_no schools, $success success, $failed failed\n";
