@@ -73,7 +73,7 @@ sub update_school
     }
     else
     {
-        warn "$school_no: $school{url} SUCCESS\n";
+        # warn "$school_no: $school{url} SUCCESS\n";
         $success++;
     }
 }

@@ -60,21 +60,23 @@ sub render_as
     return ( $content, $content_type );
 }
 
-sub get_phases
+sub get_keystages
 {
     my $self = shift;
     my ( $geo_where, $geo_args ) = $self->_geo_where();
     return [] unless @$geo_where;
-    my $where = "WHERE " . join( " AND ", @$geo_where );
-    my @phases = ( "all" );
-    my $sql = "SELECT DISTINCT phase FROM school $where";
+    my $where = "WHERE keystage IS NOT NULL AND " . join( " AND ", @$geo_where );
+    my @keystages = ( "all" );
+    my %join = ( "performance" => "ON school.ofsted_id = performance.ofsted_id" );
+    my $join = join( " ", map "LEFT JOIN $_ $join{$_}", keys %join );
+    my $sql = "SELECT DISTINCT keystage FROM school $join $where";
     my $sth = $self->{dbh}->prepare( $sql );
     $sth->execute( @$geo_args );
-    while ( my ( $phase ) = $sth->fetchrow )
+    while ( my ( $keystage ) = $sth->fetchrow )
     {
-        push( @phases, $phase );
+        push( @keystages, $keystage );
     }
-    return \@phases;
+    return \@keystages;
 }
 
 sub get_order_bys
@@ -103,14 +105,14 @@ sub _where
         push( @where, @$geo_where );
         push( @args, @$geo_args );
     }
-    if ( my $school_phase = $self->{parameters}{phase} )
+    if ( my $school_keystage = $self->{parameters}{keystage} )
     {
-        push( @where, "school.phase = ?" );
-        push( @args, $school_phase );
+        push( @where, "performance.keystage = ?" );
+        push( @args, $school_keystage );
     }
     else
     {
-        push( @where, "school.phase IS NOT NULL" );
+        push( @where, "performance.keystage IS NOT NULL" );
     }
     my $where = @where ? "WHERE " . join( " AND ", @where ) : '';
     return ( $where, @args );
@@ -129,7 +131,6 @@ sub _get_schools
 {
     my $self = shift;
     my @what = ( "school.*" ,"performance.*" );
-    my @from = ( "school" );
     my ( $where, @args ) = $self->_where;
     if ( $self->{parameters}{lat} && $self->{parameters}{lon} )
     {
@@ -141,12 +142,12 @@ EOF
     }
     my $what = join( ",", @what );
     my %join = ( "performance" => "ON school.ofsted_id = performance.ofsted_id" );
-    my $from = join( ",", @from );
     my $join = join( " ", map "LEFT JOIN $_ $join{$_}", keys %join );
     my $sql = <<EOF;
-SELECT SQL_CALC_FOUND_ROWS $what FROM $from $join
+SELECT SQL_CALC_FOUND_ROWS $what FROM school $join
     $where
 EOF
+    warn $sql;
     if ( $self->{parameters}{order_by} )
     {
         if ( $self->{parameters}{order_by} eq 'distance' )
@@ -155,7 +156,7 @@ EOF
         }
         else
         {
-            $sql .= " ORDER BY average_$self->{parameters}{order_by} DESC";
+            $sql .= " ORDER BY $self->{parameters}{order_by} DESC";
         }
     }
     if ( defined $self->{parameters}{limit} )
@@ -173,8 +174,8 @@ EOF
     $sth = $self->{dbh}->prepare( "SELECT FOUND_ROWS();" );
     $sth->execute();
     my ( $nschools ) = $sth->fetchrow();
-    my $phases = $self->get_phases();
-    return { nschools => $nschools, schools => \@schools, phases => $phases };
+    my $keystages = $self->get_keystages();
+    return { nschools => $nschools, schools => \@schools, keystages => $keystages };
 }
 
 sub _get_location

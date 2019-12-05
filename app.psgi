@@ -22,7 +22,7 @@ sub get_schools_page
 
     my $config = LoadFile( "$Bin/config/google.yaml" );
     print "Content-Type: text/html\n\n";
-    $parameters->{phases} = $schools->get_phases;
+    $parameters->{keystages} = $schools->get_keystages;
     $parameters->{order_bys} = $schools->get_order_bys;
     my $template_file = 'index.tt';
     $parameters->{$_} = $config->{$_} for keys %$config;
