@@ -23,7 +23,6 @@ DROP TABLE IF EXISTS `performance`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `performance` (
-  `keystage` varchar(255) default '',
   `ofsted_id` int(10) unsigned NOT NULL,
   `ks2` float default NULL,
   `ks4` float default NULL,

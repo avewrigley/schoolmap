@@ -28,11 +28,16 @@ var SCHOOLMAP = {
     },
     request:false,
     curtags:[ "body", "a", "input", "select", "div" ],
-    default_keystage_colour: "blue",
-    keystage_colour:{
-        "ks2": "green",
-        "ks4": "purple",
-        "ks5": "red"
+    default_phase_coour: "black",
+    phase_colour:{
+        '16 plus': "orange",
+        'All-through': "violet",
+        'Middle deemed primary': "cyan",
+        'Middle deemed secondary': "cyan",
+        'Not applicable': "magenta",
+        'Nursery': "green",
+        'Primary': "blue",
+        'Secondary': "red",
     },
     handle_zoom:false,
     handle_move:false,
@@ -282,12 +287,12 @@ SCHOOLMAP.getQueryString = function()
         var order_by_val = order_by.value || SCHOOLMAP.params.order_by || '';
         query_string = query_string + "&order_by=" + escape( order_by_val );
     }
-    var keystage = document.forms[0].keystage;
-    if ( keystage ) 
+    var phase = document.forms[0].phase;
+    if ( phase ) 
     {
-        var keystage_val = document.forms[0].keystage.value || SCHOOLMAP.params.keystage || '';
-        if ( keystage_val == "all" ) keystage_val = "";
-        query_string = query_string + "&keystage=" + escape( keystage_val );
+        var phase_val = document.forms[0].phase.value || SCHOOLMAP.params.phase || '';
+        if ( phase_val == "all" ) phase_val = "";
+        query_string = query_string + "&phase=" + escape( phase_val );
     }
     return query_string;
 };
@@ -301,16 +306,16 @@ SCHOOLMAP.getSchools = function()
     SCHOOLMAP.getJSON( url, SCHOOLMAP.getSchoolsCallback );
 };
 
-SCHOOLMAP.updateKeystagesSelector = function( keystages ) 
+SCHOOLMAP.updatePhasesSelector = function( phases ) 
 {
-    var sel = document.forms[0].keystage;
+    var sel = document.forms[0].phase;
     if ( ! sel ) return;
     SCHOOLMAP.removeChildren( sel );
-    for ( var i = 0; i < keystages.length; i++ )
+    for ( var i = 0; i < phases.length; i++ )
     {
-        SCHOOLMAP.addOpt( sel, { str:keystages[i], val:keystages[i] } );
+        SCHOOLMAP.addOpt( sel, { str:phases[i], val:phases[i] } );
     }
-    sel.value = SCHOOLMAP.params.keystage || "all";
+    sel.value = SCHOOLMAP.params.phase || "all";
 };
 
 SCHOOLMAP.schoolsChanged = function( schools ) 
@@ -329,7 +334,7 @@ SCHOOLMAP.schoolsChanged = function( schools )
 SCHOOLMAP.getSchoolsCallback = function( response ) 
 {
     var json = JSON.parse( response.responseText );
-    SCHOOLMAP.updateKeystagesSelector( json.keystages );
+    SCHOOLMAP.updatePhasesSelector( json.phases );
     SCHOOLMAP.updateOrderBySelector();
     if ( SCHOOLMAP.schoolsChanged( json.schools ) )
     {
@@ -381,7 +386,7 @@ SCHOOLMAP.orderByOnChange = function()
     SCHOOLMAP.getSchools();
 };
 
-SCHOOLMAP.keystageOnChange = function()
+SCHOOLMAP.phaseOnChange = function()
 {
     SCHOOLMAP.getSchools();
 };
@@ -396,24 +401,24 @@ SCHOOLMAP.updateList = function()
 
 SCHOOLMAP.activateSchool = function( school )
 {
-    var colour = SCHOOLMAP.getKeystageColour( school );
-    SCHOOLMAP.changeLinksFontWeight( school, "bold" );
+    var colour = SCHOOLMAP.getPhaseColour( school );
+    SCHOOLMAP.changeLinksColour( school, "dark" + colour );
     SCHOOLMAP.changeMarkerIcon( school, colour + "-dot" )
     if ( SCHOOLMAP.active_school ) SCHOOLMAP.deActivateSchool( SCHOOLMAP.active_school );
     SCHOOLMAP.active_school = school;
     window.status = school.name;
 }
 
-SCHOOLMAP.getKeystageColour = function( school )
+SCHOOLMAP.getPhaseColour = function( school )
 {
-    return SCHOOLMAP.keystage_colour[school.keystage] || SCHOOLMAP.default_keystage_colour;
+    return SCHOOLMAP.phase_colour[school.phase] || SCHOOLMAP.default_phase_colour;
 }
 
 SCHOOLMAP.deActivateSchool = function( school ) 
 {
     if ( ! school ) return;
-    var colour = SCHOOLMAP.getKeystageColour( school );
-    SCHOOLMAP.changeLinksFontWeight( school, "normal" );
+    var colour = SCHOOLMAP.getPhaseColour( school );
+    SCHOOLMAP.changeLinksColour( school, colour );
     SCHOOLMAP.changeMarkerIcon( school, colour );
     SCHOOLMAP.active_school = false;
 }
@@ -546,7 +551,7 @@ SCHOOLMAP.createInfoWindow = function( school )
     var html = html + "</P>";
     if ( school.ofsted_url ) 
     {
-        html = html + SCHOOLMAP.addLink( school.ofsted_url, "Ofsted report" );
+        html = html + SCHOOLMAP.addLink( school.ofsted_url, "Ofsted report (" + school.ofsted_id + ")" );
     }
     for ( keystage in SCHOOLMAP.keystages )
     {
@@ -583,7 +588,7 @@ SCHOOLMAP.createMarker = function( school )
 {
     try {
         school.latlng = new google.maps.LatLng( school.lat, school.lon );
-        var colour = SCHOOLMAP.getKeystageColour( school );
+        var colour = SCHOOLMAP.getPhaseColour( school );
         icon = {
             url: "http://maps.google.com/mapfiles/ms/icons/" + colour + ".png"
         };
@@ -607,7 +612,6 @@ SCHOOLMAP.initTableHead = function( tr )
     SCHOOLMAP.createHeadCell( tr, "No." );
     SCHOOLMAP.createHeadCell( tr, "Name", "Name of school", 1 );
     // SCHOOLMAP.createHeadCell( tr, "stage", "School stage" );
-    SCHOOLMAP.createHeadCell( tr, "Keystage", "Educational keystage" );
     SCHOOLMAP.createHeadCell( tr, "Phase", "Educational phase" );
     SCHOOLMAP.createHeadCell( tr, "Type", "Type of school" );
     SCHOOLMAP.createHeadCell( tr, "KS2", SCHOOLMAP.keystages.ks2.description );
@@ -714,7 +718,7 @@ SCHOOLMAP.createListTdContents = function( opts )
     };
     a.href = "";
     var school = opts.school;
-    var colour = SCHOOLMAP.getKeystageColour( school );
+    var colour = SCHOOLMAP.getPhaseColour( school );
     a.style.color = colour;
     if ( ! school.links ) school.links = new Array();
     school.links.push( a );
@@ -761,7 +765,6 @@ SCHOOLMAP.createListRow = function( no, school )
     var tr = document.createElement( "TR" );
     tr.appendChild( SCHOOLMAP.createListTd( { "text":no+1, "school":school } ) );
     tr.appendChild( SCHOOLMAP.createListTd( { "text":school.name, "school":school } ) );
-    tr.appendChild( SCHOOLMAP.createListTd( { "text":school.keystage, "school":school } ) );
     tr.appendChild( SCHOOLMAP.createListTd( { "text":school.phase, "school":school } ) );
     tr.appendChild( SCHOOLMAP.createListTd( { "text":school.type, "school":school } ) );
     tr.appendChild( SCHOOLMAP.createListTd( { "text":school.ks2, "school":school } ) );
@@ -834,7 +837,7 @@ SCHOOLMAP.changeMarkerIcon = function( school, icon )
     marker.setIcon( "http://maps.google.com/mapfiles/ms/icons/" + icon + ".png" );
 };
 
-SCHOOLMAP.changeLinksFontWeight = function( school, fontWeight ) 
+SCHOOLMAP.changeLinksColour = function( school, colour ) 
 {
     if ( ! school ) return;
     var links = school.links;
@@ -846,7 +849,8 @@ SCHOOLMAP.changeLinksFontWeight = function( school, fontWeight )
     for ( var i = 0; i < links.length; i++ )
     {
         link = links[i];
-        link.style.fontWeight = fontWeight;
+        link.style.color = colour;
+        // link.style.fontWeight = fontWeight;
     }
 };
 

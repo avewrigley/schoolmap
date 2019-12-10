@@ -15,18 +15,18 @@
         </li>
         [% IF address %]
             <li>
-                [% IF keystage %]school keystage[% ELSE %]second, select educational keystage of school[% END %]
-                <select name="keystage">
-                    [% FOREACH t IN keystages %]
+                [% IF phase %]school phase[% ELSE %]second, select educational phase of school[% END %]
+                <select name="phase">
+                    [% FOREACH t IN phases %]
                         <option 
                             value="[% t %]"
-                            [% IF t == keystage %]selected="selected"[% END %]
+                            [% IF t == phase %]selected="selected"[% END %]
                         >[% t | html_entity %]</option>
                     [% END %]
                 </select>
             </li>
         [% END %]
-        [% IF keystage %]
+        [% IF phase %]
             <li>
                 [% IF order_by %]order by[% ELSE %]finally, select how you want to order the results[% END %]
                 <select name="order_by">

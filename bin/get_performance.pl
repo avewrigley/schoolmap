@@ -39,15 +39,15 @@ my ( $dbh, $acronyms, %done );
 my %config = (
     ks4 => {
         performance_url_key => "ks4_performance_url",
-        fields => [qw( ATT8SCR URN )],
+        score_field => 'ATT8SCR',
     },
     ks5 => {
         performance_url_key => "post16_performance_url",
-        fields => [qw( TALLPPE_ALEV_1618 URN )],
+        score_field => 'TALLPPE_ALEV_1618',
     },
     ks2 => {
         performance_url_key => "ks2_performance_url",
-        fields => [qw( TKS1AVERAGE URN )],
+        score_field => 'TKS1AVERAGE',
     },
 );
 
@@ -81,28 +81,43 @@ if ( ! -e $csv_file || $opts{force} )
 }
 my $csv = Text::CSV->new ( { binary => 1 } ) or die "Cannot use CSV: ".Text::CSV->error_diag ();
 open my $fh, "<:encoding(utf8)", $csv_file or die "$csv_file $!";
+my $select_sql = <<EOF;
+SELECT * FROM performance WHERE ofsted_id = ?
+EOF
+my $ssth = $dbh->prepare( $select_sql );
 my $insert_sql = <<EOF;
-REPLACE INTO performance (
-    keystage,
-    $keystage,
-    ofsted_id
-) VALUES(?,?,?)
+INSERT INTO performance ( ofsted_id, $keystage) VALUES(?,?)
 EOF
 my $isth = $dbh->prepare( $insert_sql );
+my $update_sql = <<EOF;
+UPDATE performance SET $keystage = ? WHERE ofsted_id = ?
+EOF
+my $usth = $dbh->prepare( $update_sql );
 my $header = $csv->getline( $fh );
 while ( my $row = $csv->getline( $fh ) )
 {
     ++$school_no;
     my %row;
     @row{@$header} = @$row;
-    next unless defined($row{URN}) and length($row{URN});
-    warn "$row{URN}\n";
-    my @fields = @{$config{$keystage}{fields}};
-    warn Dumper(\@fields);
-    my @row = map {looks_like_number($_) ? $_ : 0.0} @row{@fields};
-    warn Dumper(\@row);
-    warn "$school_no: $row{URN} SUCCESS\n";
-    $isth->execute( $opts{keystage}, @row );
+    next unless defined($row{URN}) and length($row{URN}) and $row{URN} =~ /\S/;
+    my $score_field = $config{$keystage}{score_field};
+    my $score = $row{$score_field};
+    if ( looks_like_number( $score ) )
+    {
+        warn "$school_no: $row{URN} $score\n";
+        $ssth->execute( $row{URN} );
+        my @row = $ssth->fetchrow();
+        if ( @row )
+        {
+            warn "UPDATE $row{URN} SET $keystage = $score\n";
+            $usth->execute( $score, $row{URN} );
+        }
+        else
+        {
+            warn "INSERT ($row{URN} $score)\n";
+            $isth->execute( $row{URN}, $score );
+        }
+    }
 
 }
 warn "$0 ($$) finished - $school_no schools\n";

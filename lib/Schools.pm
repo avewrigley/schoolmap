@@ -60,23 +60,23 @@ sub render_as
     return ( $content, $content_type );
 }
 
-sub get_keystages
+sub get_phases
 {
     my $self = shift;
     my ( $geo_where, $geo_args ) = $self->_geo_where();
     return [] unless @$geo_where;
-    my $where = "WHERE keystage IS NOT NULL AND " . join( " AND ", @$geo_where );
-    my @keystages = ( "all" );
+    my $where = "WHERE phase IS NOT NULL AND " . join( " AND ", @$geo_where );
+    my @phases = ( "all" );
     my %join = ( "performance" => "ON school.ofsted_id = performance.ofsted_id" );
-    my $join = join( " ", map "LEFT JOIN $_ $join{$_}", keys %join );
-    my $sql = "SELECT DISTINCT keystage FROM school $join $where";
+    my $join = join( " ", map "JOIN $_ $join{$_}", keys %join );
+    my $sql = "SELECT DISTINCT phase FROM school $join $where";
     my $sth = $self->{dbh}->prepare( $sql );
     $sth->execute( @$geo_args );
-    while ( my ( $keystage ) = $sth->fetchrow )
+    while ( my ( $phase ) = $sth->fetchrow )
     {
-        push( @keystages, $keystage );
+        push( @phases, $phase );
     }
-    return \@keystages;
+    return \@phases;
 }
 
 sub get_order_bys
@@ -105,14 +105,14 @@ sub _where
         push( @where, @$geo_where );
         push( @args, @$geo_args );
     }
-    if ( my $school_keystage = $self->{parameters}{keystage} )
+    if ( my $school_phase = $self->{parameters}{phase} )
     {
-        push( @where, "performance.keystage = ?" );
-        push( @args, $school_keystage );
+        push( @where, "school.phase = ?" );
+        push( @args, $school_phase );
     }
     else
     {
-        push( @where, "performance.keystage IS NOT NULL" );
+        push( @where, "school.phase IS NOT NULL" );
     }
     my $where = @where ? "WHERE " . join( " AND ", @where ) : '';
     return ( $where, @args );
@@ -142,7 +142,7 @@ EOF
     }
     my $what = join( ",", @what );
     my %join = ( "performance" => "ON school.ofsted_id = performance.ofsted_id" );
-    my $join = join( " ", map "LEFT JOIN $_ $join{$_}", keys %join );
+    my $join = join( " ", map "JOIN $_ $join{$_}", keys %join );
     my $sql = <<EOF;
 SELECT SQL_CALC_FOUND_ROWS $what FROM school $join
     $where
@@ -174,8 +174,8 @@ EOF
     $sth = $self->{dbh}->prepare( "SELECT FOUND_ROWS();" );
     $sth->execute();
     my ( $nschools ) = $sth->fetchrow();
-    my $keystages = $self->get_keystages();
-    return { nschools => $nschools, schools => \@schools, keystages => $keystages };
+    my $phases = $self->get_phases();
+    return { nschools => $nschools, schools => \@schools, phases => $phases };
 }
 
 sub _get_location
