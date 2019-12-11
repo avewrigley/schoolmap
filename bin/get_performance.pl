@@ -11,7 +11,8 @@ use strict;
 use warnings;
 
 use FindBin qw( $Bin );
-use LWP::Simple;
+use LWP::UserAgent;
+use Gzip::Faster;
 use Pod::Usage;
 use Getopt::Long;
 use Proc::Pidfile;
@@ -51,8 +52,30 @@ my %config = (
     },
 );
 
+sub get
+{
+    my ($ua, $url, $path) = @_;
+    my $response = $ua->get($url);
+    if ($response->is_success ()) {
+        my $content_encoding = $response->header ('Content-Encoding');
+        my $text = $response->content;
+        if ($content_encoding) {
+            if ($content_encoding eq 'gzip') {
+                my $uncompressed = gunzip ($text);
+                $text = $uncompressed;
+            }
+        }
+        write_file( $path, $text );
+    }
+    else {
+        die "GET '$url' failed: ", $response->status_line, "\n";
+    }
+}
+
 $opts{pidfile} = 1;
 $opts{keystage} = "ks4";
+my $ua = LWP::UserAgent->new ();
+
 GetOptions( \%opts, @opts ) or pod2usage( verbose => 0 );
 my $keystage = $opts{keystage};
 if ( not exists $config{$keystage} )
@@ -77,7 +100,7 @@ my $csv_file = "$Bin/../downloads/${keystage}_performance.csv";
 if ( ! -e $csv_file || $opts{force} )
 {
     warn "GET $performance_url ($performance_url_key) => $csv_file\n";
-    getstore( $performance_url, $csv_file );
+    get( $ua, $performance_url, $csv_file );
 }
 my $csv = Text::CSV->new ( { binary => 1 } ) or die "Cannot use CSV: ".Text::CSV->error_diag ();
 open my $fh, "<:encoding(utf8)", $csv_file or die "$csv_file $!";
