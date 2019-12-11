@@ -42,7 +42,7 @@ my %config = (
         score_field => 'ATT8SCR',
     },
     ks5 => {
-        performance_url_key => "post16_performance_url",
+        performance_url_key => "ks5_performance_url",
         score_field => 'TALLPPE_ALEV_1618',
     },
     ks2 => {
