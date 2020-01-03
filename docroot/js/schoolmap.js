@@ -30,14 +30,14 @@ var SCHOOLMAP = {
     curtags:[ "body", "a", "input", "select", "div" ],
     default_phase_coour: "black",
     phase_colour:{
-        '16 plus': "orange",
-        'All-through': "violet",
-        'Middle deemed primary': "cyan",
-        'Middle deemed secondary': "cyan",
-        'Not applicable': "magenta",
-        'Nursery': "green",
-        'Primary': "blue",
-        'Secondary': "red",
+        '16 plus': { "normal": "yellow", "active": "orange" },
+        'All-through': { "normal": "purple", "active": "mediumpurple" },
+        'Middle deemed primary': { "normal": "pink", "active": "deeppink" },
+        'Middle deemed secondary': { "normal": "pink", "active": "deeppink" },
+        'Not applicable': { "normal": "purple", "active": "mediumpurple" },
+        'Nursery': { "normal": "green", "active": "darkgreen" },
+        'Primary': { "normal": "blue", "active": "darkblue" },
+        'Secondary': { "normal": "red", "active": "darkred" },
     },
     handle_zoom:false,
     handle_move:false,
@@ -50,8 +50,6 @@ SCHOOLMAP.updateAddress = function( point, address )
     SCHOOLMAP.createAddressMarker();
     var input = document.getElementById( "address" );
     SCHOOLMAP.address = input.value = address;
-    var span = document.getElementById( "coords" );
-    SCHOOLMAP.setText( span, "( lat: " + point.lat() + ", lng: " + point.lng() + ")" );
 };
 
 SCHOOLMAP.findAddress = function( query, callback ) 
@@ -402,7 +400,8 @@ SCHOOLMAP.updateList = function()
 SCHOOLMAP.activateSchool = function( school )
 {
     var colour = SCHOOLMAP.getPhaseColour( school );
-    SCHOOLMAP.changeLinksColour( school, "dark" + colour );
+    var active_colour = SCHOOLMAP.getActivePhaseColour( school );
+    SCHOOLMAP.changeLinksColour( school, active_colour );
     SCHOOLMAP.changeMarkerIcon( school, colour + "-dot" )
     if ( SCHOOLMAP.active_school ) SCHOOLMAP.deActivateSchool( SCHOOLMAP.active_school );
     SCHOOLMAP.active_school = school;
@@ -411,7 +410,12 @@ SCHOOLMAP.activateSchool = function( school )
 
 SCHOOLMAP.getPhaseColour = function( school )
 {
-    return SCHOOLMAP.phase_colour[school.phase] || SCHOOLMAP.default_phase_colour;
+    return SCHOOLMAP.phase_colour[school.phase].normal || SCHOOLMAP.default_phase_colour;
+}
+
+SCHOOLMAP.getActivePhaseColour = function( school )
+{
+    return SCHOOLMAP.phase_colour[school.phase].active || SCHOOLMAP.default_phase_colour;
 }
 
 SCHOOLMAP.deActivateSchool = function( school ) 
@@ -667,8 +671,6 @@ SCHOOLMAP.initMap = function()
     );
     SCHOOLMAP.map.setCenter( center, zoom );
     SCHOOLMAP.distance_service = new google.maps.DistanceMatrixService();
-    var directionsElement = document.getElementById( "directions" );
-    console.log( "directions div: " + directionsElement );
     SCHOOLMAP.map.addListener( 
         "dragend", 
         function() {
