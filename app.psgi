@@ -4,7 +4,7 @@ use Data::Dumper;
 use YAML qw( LoadFile );
 use FindBin qw( $Bin );
 use File::Slurp;
-use File::MMagic;
+use File::MimeInfo;
 
 use lib "$Bin/lib";
 require Schools;
@@ -21,7 +21,6 @@ sub get_schools_page
     my $parameters = shift;
 
     my $config = LoadFile( "$Bin/config/google.yaml" );
-    print "Content-Type: text/html\n\n";
     $parameters->{phases} = $schools->get_phases;
     $parameters->{order_bys} = $schools->get_order_bys;
     my $template_file = 'index.tt';
@@ -44,8 +43,8 @@ sub {
     my $content = '';
     if ( $path eq "/" || $path eq "/index.cgi" )
     {
-        my $body = get_schools_page( $schools, $parameters );
-        $content = "<body>$body</body>";
+        $content_type = "text/html";
+        $content = get_schools_page( $schools, $parameters );
     }
     elsif ( $path eq '/schools' )
     {
@@ -55,8 +54,8 @@ sub {
     else
     {
         my $file_path = "$Bin/docroot$path";
-        my $mm = new File::MMagic;
-        $content_type = $mm->checktype_filename( $file_path );
+        $content_type = mimetype($file_path);
+        warn "content type for $file_path = $content_type\n";
         $content = read_file( $file_path );
     }
     # open( STDERR, ">>$Bin/logs/index.log" );
