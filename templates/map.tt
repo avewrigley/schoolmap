@@ -2,14 +2,11 @@
     <tr>
         <td class="half" id="mapContainer">
             <div id="map"></div>
-            <div id="linkto"></div>
-            <div id="layers"></div>
-            <div id="coords"></div>
-            <div id="directions"></div>
         </td>
         <td class="half" id="list"></td>
     </tr>
 </table>
+<div id="linkto"></div>
 <script type="text/javascript">
     SCHOOLMAP.initMap();
 </script>
