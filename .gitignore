@@ -1,3 +1,6 @@
 logs
 downloads
-config
+.gitsecret/keys/random_seed
+!*.secret
+config/schoolmap.yaml
+config/google.yaml
