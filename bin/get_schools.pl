@@ -13,7 +13,9 @@ use warnings;
 use WWW::Mechanize;
 use HTML::Entities;
 use FindBin qw( $Bin );
-use LWP::Simple;
+use LWP::UserAgent;
+use Gzip::Faster;
+use File::Slurp;
 use Text::CSV;
 use YAML qw( LoadFile );
 use Pod::Usage;
@@ -34,6 +36,26 @@ my $csv_file = "$Bin/../downloads/schools.csv";
 my $template_dir = "$Bin/../templates";
 
 my ( $dbh, $sc );
+
+sub get
+{
+    my ($ua, $url, $path) = @_;
+    my $response = $ua->get($url);
+    if ($response->is_success ()) {
+        my $content_encoding = $response->header ('Content-Encoding');
+        my $text = $response->content;
+        if ($content_encoding) {
+            if ($content_encoding eq 'gzip') {
+                my $uncompressed = gunzip ($text);
+                $text = $uncompressed;
+            }
+        }
+        write_file( $path, $text );
+    }
+    else {
+        die "GET '$url' failed: ", $response->status_line, "\n";
+    }
+}
 
 sub get_address
 {
@@ -92,7 +114,9 @@ my $config = LoadFile( $config_file );
 if ( ! -e $csv_file )
 {
     my $csvurl = $config->{schools_url};
-    my $code = getstore( $csvurl, $csv_file );
+    warn "GET $csvurl => $csv_file\n";
+    my $ua = LWP::UserAgent->new ();
+    get( $ua, $csvurl, $csv_file );
 }
 $sc = Schools->new( config_file => $config_file, template_dir => $template_dir );
 my $csv = Text::CSV->new ( { binary => 1 } ) or die "Cannot use CSV: ".Text::CSV->error_diag ();
