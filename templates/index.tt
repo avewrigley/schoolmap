@@ -17,6 +17,7 @@
             <li>
                 [% IF phase %]school phase[% ELSE %]second, select educational phase of school[% END %]
                 <select name="phase">
+                    <option value=""></option>
                     [% FOREACH t IN phases %]
                         <option 
                             value="[% t %]"
