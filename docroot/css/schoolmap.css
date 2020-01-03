@@ -84,18 +84,6 @@ table#main td.half {
     padding: 5px;
 }
 
-#coords { 
-    display: none;
-    font-size: 16px;
-    font-weight: bold;
-}
-
-#directions {
-    display: none;
-    width: 0; 
-    height: 0;
-}
-
 div#layers {
     position: relative;
     top: -50px;
