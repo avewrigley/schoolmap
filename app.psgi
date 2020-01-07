@@ -33,6 +33,18 @@ sub get_schools_page
     return $output;
 }
 
+sub get_schoolmap_js
+{
+    my $config = LoadFile( "$Bin/config/schoolmap.yaml" );
+    my $template_file = 'schoolmap_js.tt';
+    my $template = Template->new( INCLUDE_PATH => "$Bin/templates" );
+    my $output = '';
+    $template->process( $template_file, $config, \$output )
+        || die $template->error()
+    ;
+    return $output;
+}
+
 sub {
     my $req = Plack::Request->new( shift );
     my $code = 200;
@@ -45,6 +57,11 @@ sub {
     {
         $content_type = "text/html";
         $content = get_schools_page( $schools, $parameters );
+    }
+    elsif ( $path eq "/js/schoolmap.js" )
+    {
+        $content_type = "application/javascript";
+        $content = get_schoolmap_js();
     }
     elsif ( $path eq '/schools' )
     {
