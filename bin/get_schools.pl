@@ -123,6 +123,8 @@ my $csv = Text::CSV->new ( { binary => 1 } ) or die "Cannot use CSV: ".Text::CSV
 # open my $fh, "<:encoding(utf8)", $csv_file or die "$csv_file $!";
 open my $fh, "<", $csv_file or die "$csv_file $!";
 my $header = $csv->getline( $fh );
+my $nschools = `wc -l < $csv_file` - 1;
+my $i = 0;
 while ( my $row = $csv->getline( $fh ) )
 {
     my %row;
@@ -137,6 +139,8 @@ while ( my $row = $csv->getline( $fh ) )
         postcode => $row{"Postcode"},
     );
     print Dumper( \%school );
+    $i++;
+    print "$i / $nschools\n";
     update_school( %school );
 }
 warn "$0 ($$) finished - $school_no schools, $success success, $failed failed\n";
