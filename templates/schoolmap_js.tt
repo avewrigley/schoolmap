@@ -30,7 +30,7 @@ var SCHOOLMAP = {
     curtags:[ "body", "a", "input", "select", "div" ],
     default_phase_coour: "black",
     phase_colour:{
-        '16 plus': { "normal": "yellow", "active": "orange" },
+        '16 plus': { "normal": "orange", "active": "darkorange" },
         'All-through': { "normal": "purple", "active": "mediumpurple" },
         'Middle deemed primary': { "normal": "pink", "active": "deeppink" },
         'Middle deemed secondary': { "normal": "pink", "active": "deeppink" },
