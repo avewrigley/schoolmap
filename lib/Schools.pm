@@ -217,6 +217,22 @@ SQL
     return $school;
 }
 
+sub remove_non_ascii_characters
+{
+    my $str = shift;
+    $str =~ s/(.)/(ord($1) > 127) ? "?" : $1/egs;
+    return $str;
+}
+
+sub sanitise_school
+{
+    my $school = shift;
+    foreach my $key ( keys %$school )
+    {
+        $school->{$key} = remove_non_ascii_characters( $school->{$key} );
+    }
+}
+
 sub create_school
 {
     my $self = shift;
@@ -229,6 +245,7 @@ sub create_school
     $school{postcode} = uc( $school{postcode} );
     $school{postcode} =~ s/[^0-9 A-Z]//g;
     ( $school{lat}, $school{lon} ) = $self->_get_location( \%school );
+    sanitise_school( \%school );
     my $isth = $self->{dbh}->prepare( <<SQL );
 REPLACE INTO school ( ofsted_id, ofsted_url, name, type, phase, postcode, address, lat, lon ) VALUES ( ?,?,?,?,?,?,?,?,? )
 SQL
