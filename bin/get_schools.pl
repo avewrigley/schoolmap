@@ -87,6 +87,7 @@ sub update_school
     if ( $@ )
     {
         warn "$school_no: $school{url} FAILED: $@\n";
+        warn Dumper(\%school);
         $failed++;
     }
     else
@@ -99,7 +100,6 @@ sub update_school
 # Main
 
 $opts{pidfile} = 1;
-$opts{force} = 1;
 GetOptions( \%opts, @opts ) or pod2usage( verbose => 0 );
 my $pp;
 if ( $opts{pidfile} )
@@ -111,7 +111,7 @@ unless ( $opts{verbose} )
     open( STDERR, ">", $log_file ) or die "can't write to $log_file\n";
 }
 my $config = LoadFile( $config_file );
-if ( ! -e $csv_file )
+if ( ! -e $csv_file || $opts{force} )
 {
     my $csvurl = $config->{schools_url};
     warn "GET $csvurl => $csv_file\n";
@@ -138,9 +138,8 @@ while ( my $row = $csv->getline( $fh ) )
         address => get_address( \%row ),
         postcode => $row{"Postcode"},
     );
-    print Dumper( \%school );
     $i++;
-    print "$i / $nschools\n";
+    print STDERR "$i / $nschools\r";
     update_school( %school );
 }
 warn "$0 ($$) finished - $school_no schools, $success success, $failed failed\n";
