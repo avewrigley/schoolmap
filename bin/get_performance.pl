@@ -91,7 +91,7 @@ warn "connect to DB\n";
 $dbh = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
 unless ( $opts{verbose} )
 {
-    open( STDERR, ">$log_file" ) or die "can't write to $log_file\n";
+    open( STDERR, ">", $log_file ) or die "can't write to $log_file\n";
 }
 my $config = LoadFile( $config_file );
 my $performance_url_key = $config{$keystage}{performance_url_key};

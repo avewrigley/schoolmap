@@ -1,11 +1,10 @@
 package Geo::Postcode;
 
-$VERSION = '1.00';
-
 use strict;
 use warnings;
 
 use vars qw( $VERSION );
+$VERSION = '1.00';
 
 use DBI;
 

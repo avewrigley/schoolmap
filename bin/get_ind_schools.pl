@@ -96,7 +96,7 @@ getstore( $csvurl, $csv_file );
 $sc = Schools->new( config_file => $config_file, template_dir => $template_dir );
 unless ( $opts{verbose} )
 {
-    open( STDERR, ">$log_file" ) or die "can't write to $log_file\n";
+    open( STDERR, ">", $log_file ) or die "can't write to $log_file\n";
 }
 my $csv = Text::CSV->new ( { binary => 1 } ) or die "Cannot use CSV: ".Text::CSV->error_diag ();
 # open my $fh, "<:encoding(utf8)", $csv_file or die "$csv_file $!";

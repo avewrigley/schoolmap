@@ -108,7 +108,7 @@ if ( $opts{pidfile} )
 }
 unless ( $opts{verbose} )
 {
-    open( STDERR, ">$log_file" ) or die "can't write to $log_file\n";
+    open( STDERR, ">", $log_file ) or die "can't write to $log_file\n";
 }
 my $config = LoadFile( $config_file );
 if ( ! -e $csv_file )
