@@ -26,7 +26,7 @@ use lib "$Bin/../lib";
 require Schools;
 
 my %opts;
-my @opts = qw( force! silent pidfile! verbose phase=s );
+my @opts = qw( force! silent pidfile! verbose );
 my $school_no = 0;
 my $failed = 0;
 my $success = 0;
@@ -70,9 +70,17 @@ sub get_address
 
 sub update_school
 {
-    my %school = @_;
+    my %row = @_;
 
-    return if $opts{phase} && $school{phase} ne $opts{phase};
+    my %school = ( 
+        name => $row{"EstablishmentName"},
+        ofsted_id => $row{"URN"},
+        url => "http://www.ofsted.gov.uk/inspection-reports/find-inspection-report/provider/ELS/" . $row{"URN"},
+        type => $row{"TypeOfEstablishment (name)"},
+        phase => $row{"PhaseOfEducation (name)"},
+        address => get_address( \%row ),
+        postcode => $row{"Postcode"},
+    );
     ++$school_no;
     eval {
         die "no type\n" unless $school{type};
@@ -129,17 +137,8 @@ while ( my $row = $csv->getline( $fh ) )
 {
     my %row;
     @row{@$header} = @$row;
-    my %school = ( 
-        name => $row{"EstablishmentName"},
-        ofsted_id => $row{"URN"},
-        url => "http://www.ofsted.gov.uk/inspection-reports/find-inspection-report/provider/ELS/" . $row{"URN"},
-        type => $row{"TypeOfEstablishment (name)"},
-        phase => $row{"PhaseOfEducation (name)"},
-        address => get_address( \%row ),
-        postcode => $row{"Postcode"},
-    );
+    update_school( %row );
     $i++;
     print STDERR "$i / $nschools\r";
-    update_school( %school );
 }
 warn "$0 ($$) finished - $school_no schools, $success success, $failed failed\n";
