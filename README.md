@@ -3,4 +3,4 @@
 * cpanm (https://metacpan.org/pod/App::cpanminus)
 * Plack (https://plackperl.org/)
 # To start
-`sudo plackup --port [port no] app.psgi`
+`sudo /usr/local/bin/plackup --port [port no] app.psgi`
