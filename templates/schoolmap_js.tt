@@ -515,23 +515,29 @@ SCHOOLMAP.calculateDistance = function( school_no )
     }
     try {
         console.log( "calculate distance for " + school.name );
-        SCHOOLMAP.distance_service.getDistanceMatrix( {
-                origins: [school.latlng],
-                destinations: [SCHOOLMAP.point],
-                travelMode: 'WALKING',
-            }, 
-            function (response, status) {
-                school.meters = response.rows[0].elements[0].distance.value;
-                if ( school.distance_td ) 
-                {
-                    var text = SCHOOLMAP.convertMeters( school.meters );
-                    var a = SCHOOLMAP.createListTdContents( { "text":text, "school":school } );
-                    SCHOOLMAP.removeChildren( school.distance_td );
-                    school.distance_td.appendChild( a );
+        if ( SCHOOLMAP.distance_service )
+        {
+            SCHOOLMAP.distance_service.getDistanceMatrix( {
+                    origins: [school.latlng],
+                    destinations: [SCHOOLMAP.point],
+                    travelMode: 'WALKING',
+                }, 
+                function (response, status) {
+                    if ( status === google.maps.DistanceMatrixStatus.OK )
+                    {
+                        school.meters = response.rows[0].elements[0].distance.value;
+                        if ( school.distance_td ) 
+                        {
+                            var text = SCHOOLMAP.convertMeters( school.meters );
+                            var a = SCHOOLMAP.createListTdContents( { "text":text, "school":school } );
+                            SCHOOLMAP.removeChildren( school.distance_td );
+                            school.distance_td.appendChild( a );
+                        }
+                        SCHOOLMAP.calculateDistance( school_no+1 );
+                    }
                 }
-                SCHOOLMAP.calculateDistance( school_no+1 );
-            }
-        );
+            );
+        }
     } catch( e ) {
         console.error( e.message );
         return;
