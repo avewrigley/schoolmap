@@ -35,9 +35,18 @@ sub new
     # $self->{debug} = 1;
     $self->{config} = LoadFile( $self->{config_file} );
     $self->{tt} = Template->new( INCLUDE_PATH => $self->{template_dir} );
-    $self->{geopostcode} = Geo::Postcode->new( );
+    $self->{geopostcode} = Geo::Postcode->new(
+        mysql_database => $self->{config}{mysql_database}, 
+        mysql_username => $self->{config}{mysql_username}, 
+        mysql_password => $self->{config}{mysql_password}, 
+    );
     $self->{geocoder} = Geo::Coder::OpenCage->new( api_key => $self->{config}{open_cage_api_key} );
-    $self->{dbh} = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap', { RaiseError => 1, PrintError => 0 } );
+    $self->{dbh} = DBI->connect( 
+        "DBI:mysql:" . $self->{config}{mysql_database}, 
+        $self->{config}{mysql_username}, 
+        $self->{config}{mysql_password}, 
+        { RaiseError => 1, PrintError => 0 }
+    );
     return $self;
 }
 

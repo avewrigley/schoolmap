@@ -13,9 +13,12 @@ sub new
     my $class = shift;
     my %args = @_;
     my $self = bless \%args, $class;
-    $self->{dbh} = DBI->connect( "DBI:mysql:schoolmap", 'schoolmap', 'schoolmap' )
-        or die "Cannot connect: $DBI::errstr"
-    ;
+    $self->{dbh} = DBI->connect( 
+        "DBI:mysql:" . $self->{mysql_database}, 
+        $self->{mysql_username}, 
+        $self->{mysql_password}, 
+        { RaiseError => 1, PrintError => 0 }
+    );
     return $self;
 }
 
